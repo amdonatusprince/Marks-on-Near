@@ -6,6 +6,28 @@ The front of the product is a market board in the spirit of [tokens.xyz](https:/
 
 This is the Unstoppable DeFi track of the [NEAR hackathon](https://nearhackathon.com/). The track asks for exchanges, perps, and trading agents that settle across chains, with no custodian and nobody who can switch the market off. The repository is Marks on Near.
 
+## How a trade moves
+
+Collateral comes in through the token. The oracle writes the mark. The contract matches the order in the same call. A withdrawal sends the token back out.
+
+```mermaid
+sequenceDiagram
+  participant Trader
+  participant Board
+  participant Marks
+  participant Token
+  participant Oracle
+  Trader->>Token: ft_transfer_call
+  Token->>Marks: ft_on_transfer
+  Marks->>Oracle: oracle_call
+  Oracle->>Marks: oracle_on_call
+  Trader->>Marks: commit then place_order
+  Marks->>Marks: match FIFO at maker price
+  Board->>Marks: get_markets and get_l2
+  Trader->>Marks: withdraw
+  Marks->>Token: ft_transfer
+```
+
 ## How a listing works
 
 A listing is a market record, not a pile of the underlying asset. The contract does not hold Apple shares, gold, or NEAR tokens for the trade itself. Traders post quote collateral and settle the difference between their entry and the mark.
