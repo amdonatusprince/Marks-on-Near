@@ -33,3 +33,5 @@ jobs:
       - run: cargo test --manifest-path contract/Cargo.toml
       - run: cargo fmt --manifest-path token/Cargo.toml -- --check
       - run: cargo test --manifest-path token/Cargo.toml
+      - run: cargo fmt --manifest-path oracle/Cargo.toml -- --check
+      - run: cargo test --manifest-path oracle/Cargo.toml
