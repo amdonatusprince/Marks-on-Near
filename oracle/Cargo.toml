@@ -1,0 +1,19 @@
+[package]
+name = "marks-oracle"
+description = "Testnet price feed for Marks demo markets"
+edition = "2021"
+license = "MIT"
+publish = false
+version = "0.1.0"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+near-sdk = "5"
+
+[dev-dependencies]
+near-sdk = { version = "5", features = ["unit-testing"] }
+
+[profile.release]
+overflow-checks = true
