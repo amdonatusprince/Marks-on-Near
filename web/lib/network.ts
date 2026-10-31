@@ -14,3 +14,8 @@ export function contractFor(network: Network) {
   if (network === "mainnet") return process.env.NEXT_PUBLIC_MAINNET_CONTRACT_ID ?? "";
   return process.env.NEXT_PUBLIC_CONTRACT_ID ?? "";
 }
+
+export function oracleFor(network: Network) {
+  if (network === "mainnet") return "";
+  return process.env.NEXT_PUBLIC_ORACLE_ID ?? "";
+}

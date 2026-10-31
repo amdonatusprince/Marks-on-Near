@@ -30,6 +30,7 @@ export type Trader = {
   unallocated: string;
   open_bid_lots: number;
   open_ask_lots: number;
+  liquidation_quote_per_lot?: string | null;
 };
 
 export function contractId(network: Network = "testnet") {
@@ -45,6 +46,15 @@ export async function view<T>(network: Network, method: string, args: object): P
         : "NEXT_PUBLIC_CONTRACT_ID is not set",
     );
   }
+  return viewAccount<T>(network, account, method, args);
+}
+
+export async function viewAccount<T>(
+  network: Network,
+  account: string,
+  method: string,
+  args: object,
+): Promise<T> {
   const response = await fetch(rpcUrl(network), {
     method: "POST",
     headers: { "content-type": "application/json" },
