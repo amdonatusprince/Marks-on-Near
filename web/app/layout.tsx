@@ -30,13 +30,13 @@ export default async function RootLayout({
 }>) {
   const network = await selectedNetwork();
   return (
-    <html lang="en" style={{ backgroundColor: "#0e1014" }}>
+    <html lang="en" className="h-full" style={{ backgroundColor: "#0e1014" }}>
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+        className={`${geistSans.variable} ${geistMono.variable} flex min-h-dvh flex-col antialiased`}
         style={{ backgroundColor: "#0e1014", color: "#f4f4f5" }}
       >
         <NearProvider initialNetwork={network}>
-          <header className="border-b border-border bg-card">
+          <header className="shrink-0 border-b border-border bg-card">
             <div className="mx-auto flex max-w-[1440px] items-center justify-between gap-3 px-3 py-3 md:px-4">
               <Link
                 href="/"
@@ -50,7 +50,9 @@ export default async function RootLayout({
               </div>
             </div>
           </header>
-          <main className="mx-auto max-w-[1440px] px-3 py-3 md:px-4">{children}</main>
+          <main className="mx-auto flex w-full max-w-[1440px] flex-1 flex-col px-3 py-3 md:px-4">
+            {children}
+          </main>
           <SignInDialog />
         </NearProvider>
       </body>

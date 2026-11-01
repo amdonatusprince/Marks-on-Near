@@ -3,7 +3,10 @@
 import { AccountPanel } from "@/components/account-panel";
 import { OrderBook } from "@/components/order-book";
 import { OrderTicket } from "@/components/order-ticket";
-import { dollars, quote } from "@/lib/format";
+import { PriceChart } from "@/components/price-chart";
+import { fundingWords, money, openInterest, price as priceOf } from "@/lib/format";
+import { contractSize } from "@/lib/markets";
+import type { CandleBar } from "@/lib/ohlc";
 import type { Book, Market } from "@/lib/rpc";
 import Link from "next/link";
 import { useState } from "react";
@@ -12,18 +15,23 @@ export function TradeDesk({
   market,
   book,
   fundingBps,
+  history,
+  chartNote,
 }: {
   market: Market;
   book: Book;
   fundingBps: number;
+  history: CandleBar[];
+  chartNote: string;
 }) {
   const [price, setPrice] = useState(String(market.mark_ticks || ""));
   const [side, setSide] = useState<"bid" | "ask">("bid");
+  const unit = contractSize(market.symbol);
 
   return (
-    <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_22rem]">
-      <div className="order-2 grid gap-3 lg:order-1">
-        <header className="flex flex-wrap items-end justify-between gap-3 rounded-lg border border-border bg-card px-4 py-3">
+    <div className="grid gap-3 md:h-[calc(100dvh-5.75rem)] md:grid-cols-[minmax(0,1fr)_22rem] md:grid-rows-[minmax(0,1fr)]">
+      <div className="flex flex-col gap-3 md:h-full md:min-h-0">
+        <header className="grid shrink-0 gap-x-6 gap-y-2 rounded-lg border border-border bg-card px-4 py-3 md:grid-cols-[auto_auto_minmax(0,1fr)] md:items-end">
           <div>
             <Link
               href="/"
@@ -33,25 +41,41 @@ export function TradeDesk({
             </Link>
             <h1 className="text-2xl font-semibold tracking-tight">{market.symbol}</h1>
             <p className="text-xs text-muted-foreground">
-              {market.category} · {market.asset_id}
+              {market.category}
+              {unit ? ` · 1 contract = ${unit}` : " · one contract is priced in USDC"}
             </p>
           </div>
-          <p className="font-mono text-3xl">{dollars(market.mark_ticks, market.tick_size)}</p>
+          <div>
+            <p className="text-xs text-muted-foreground">Price</p>
+            <p className="font-mono text-3xl">{priceOf(market.mark_ticks, market.tick_size)}</p>
+          </div>
           <dl className="grid grid-cols-3 gap-4 text-sm">
             <div>
               <dt className="text-xs text-muted-foreground">Funding</dt>
-              <dd className="font-mono">{fundingBps} bps</dd>
+              <dd>{fundingWords(fundingBps)}</dd>
+              <dd className="text-xs text-muted-foreground">
+                {fundingBps === 0
+                  ? "Price matches the index, so nobody pays."
+                  : "Paid every few seconds on testnet."}
+              </dd>
             </div>
             <div>
               <dt className="text-xs text-muted-foreground">Open interest</dt>
-              <dd className="font-mono">{market.open_interest_lots}</dd>
+              <dd className="font-mono">
+                {openInterest(market.open_interest_lots, market.mark_ticks, market.tick_size)}
+              </dd>
+              <dd className="text-xs text-muted-foreground">
+                {market.open_interest_lots}{" "}
+                {market.open_interest_lots === 1 ? "contract" : "contracts"} open
+              </dd>
             </div>
             <div>
-              <dt className="text-xs text-muted-foreground">Volume</dt>
-              <dd className="font-mono">{quote(market.volume_quote)}</dd>
+              <dt className="text-xs text-muted-foreground">Traded</dt>
+              <dd className="font-mono">{money(market.volume_quote)}</dd>
             </div>
           </dl>
         </header>
+        <PriceChart assetId={market.asset_id} candles={history} note={chartNote} />
         <OrderBook
           bids={book.bids}
           asks={book.asks}
@@ -64,13 +88,14 @@ export function TradeDesk({
         />
         <AccountPanel symbol={market.symbol} />
       </div>
-      <div className="order-1 lg:sticky lg:top-3 lg:order-2 lg:self-start">
+      <div className="md:h-full md:min-h-0 md:overflow-y-auto">
         <OrderTicket
           symbol={market.symbol}
           markTicks={market.mark_ticks}
           tickSize={market.tick_size}
           price={price}
           side={side}
+          maintenanceBps={market.maintenance_margin_bps}
           onPrice={setPrice}
           onSide={setSide}
         />
