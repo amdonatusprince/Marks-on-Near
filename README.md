@@ -2,10 +2,6 @@
 
 Marks is a perpetual market on NEAR. A trader posts USDC into the contract and trades a price. A long profits when the mark rises. A short profits when it falls. The contract keeps the balances itself, matches orders in its own state, and has no admin method that can halt the book.
 
-The front of the product is a market board in the spirit of [tokens.xyz](https://tokens.xyz): each row is a market, with a mark price, volume, and open interest. Crypto, metals, and stocks are categories on that board. Opening a row leads to an order book.
-
-This is the Unstoppable DeFi track of the [NEAR hackathon](https://nearhackathon.com/). The track asks for exchanges, perps, and trading agents that settle across chains, with no custodian and nobody who can switch the market off. The repository is Marks on Near.
-
 ## How a trade moves
 
 Collateral comes in through the token. The oracle writes the mark. The contract matches the order in the same call. A withdrawal sends the token back out.
@@ -100,6 +96,8 @@ Worked example. Long 10, entry 5,000,000 quote atoms per lot, collateral 10,000,
 
 `liquidate` may be called by anyone. It settles funding first. A flat account, or one whose equity is still at or above maintenance, fails with `not liquidatable` and no order is cancelled. An under-margined account has its resting orders on that symbol cancelled, then the whole position closes at the mark. The caller receives 1 percent of the closed notional, taken from the collateral that remains after the close. If the realized loss is larger than the collateral, the account is left at zero and the deficit is paid from that market's insurance. Whatever insurance cannot cover is added to `bad_debt`.
 
+The order ticket shows that price before the trade, assuming this order is the whole position and only the 10 percent initial margin is posted. A long at that margin liquidates a little over 5 percent below the entry. A short liquidates a little over 5 percent above it. Extra collateral moves the price further away. After the fill, the Position tab shows the price the contract computed from the collateral actually committed to that market. A flat position has none.
+
 ### Funding
 
 The contract charges funding when a trader acts, and when anyone calls `settle_funding`.
@@ -143,15 +141,16 @@ contract/          NEAR contract
   src/api_tests.rs calls every public method through the local NEAR runtime
   src/math/        integer formulas
   src/exchange/    the market, the ledger, and the book
+oracle/            demo price feed. It stores public prices and a short history.
 token/             NEP-141 collateral used on testnet
-web/               Next.js board. The header switch selects testnet or mainnet. Testnet reads marks-05a557.testnet.
+web/               Next.js board. The header switch selects testnet or mainnet.
 scripts/           testnet account, deploy, call, quote, and Intents scripts
   testnet.env      account ids and market parameters
 ```
 
 ## Checks
 
-`cargo test` for `contract/` and `token/` runs every market function against named inputs. `npm run format:check` runs Prettier on the web app and the docs. `.github/workflows/ci.yml` runs Prettier, `tsc`, rustfmt, and both test suites.
+`cargo test` for `contract/`, `token/`, and `oracle/` runs every market function against named inputs. `npm run format:check` runs Prettier on the web app and the docs. `.github/workflows/ci.yml` runs Prettier, `tsc`, rustfmt, and those test suites.
 
 ### Math
 
@@ -215,6 +214,7 @@ The test token in `token/` is a NEP-141 with 6 decimals. Its symbol is `USDC` an
 ```sh
 cargo test --manifest-path contract/Cargo.toml
 cargo test --manifest-path token/Cargo.toml
+cargo test --manifest-path oracle/Cargo.toml
 ```
 
 The tests cover each math function, order queueing, margin, cancellation, the mark band, fills, and a full pass through the public methods on the local NEAR runtime.
@@ -312,13 +312,53 @@ The signer on `call` defaults to `CONTRACT_ID`. `refresh_mark` attaches 0.02 NEA
 
 Nearblocks is the explorer for these transactions. An account is `https://testnet.nearblocks.io/address/<account>`. A transaction is `https://testnet.nearblocks.io/txns/<hash>`.
 
-## The board
+## Demo markets
 
-`web/` is a Next.js app. The index reads `get_markets` and shows symbol, category, mark, funding rate, open interest, and volume. A market page is a trading desk: the order book on one side, a long/short ticket on the other. The header switches the board and the wallet between testnet and mainnet. Testnet is the live listing. Mainnet stays empty until `NEXT_PUBLIC_MAINNET_CONTRACT_ID` is set. Sign-in uses NEAR Connect, the same connector as near.com: a passkey, then NEAR, EVM, Solana, Stellar, TON, and Tron. A NEAR or EVM wallet signs `commit`, `place_order`, and `cancel_order` on the network selected in the header.
+The original `NEAR-PERP` market stays on [`marks-05a557.testnet`](https://testnet.nearblocks.io/address/marks-05a557.testnet). That contract can only take a mark from `price-oracle.testnet`, and that account is fixed inside `new`. The demo board is a second deploy.
+
+| Account                                                                                | Role                                                                                      |
+| -------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| [`marks-ffaba5.testnet`](https://testnet.nearblocks.io/address/marks-ffaba5.testnet)   | Twelve markets. Collateral is still `usdc-05a557.testnet`. The oracle is `oracle-ffaba5`. |
+| [`oracle-ffaba5.testnet`](https://testnet.nearblocks.io/address/oracle-ffaba5.testnet) | Stores the latest dollar price of one contract and up to 48 recent prints.                |
+
+`./scripts/demo.sh` creates those two accounts, appends `DEMO_CONTRACT_ID` and `DEMO_ORACLE_ID` to `scripts/testnet.env`, and does not run `create-accounts.sh`. Keys stay in the near-cli keychain. `scripts/demo_feed.py` reads CoinGecko for NEAR, SOL, ETH, BTC, and BNB, and Yahoo Finance for gold, oil, and the five shares. A failed fetch stops the script. It does not fill in a number. The stored price is the price of one contract. Marks still keeps only the latest mark. The chart draws the public session as green and red candles, with the volume underneath. Switches above the chart change the candle to 1 minute, 15 minutes, 1 hour, or 1 day. A missed 15 minute fetch falls back to the oracle prints.
+
+`refresh_mark` still attaches 0.02 NEAR. The feed's `oracle_call` is payable, so it accepts that fee and calls `oracle_on_call`. The first positive price is the mark. A later print more than 25 percent away leaves the old mark in place. Each demo market uses the same 10 percent initial margin, 5 percent maintenance margin, 50 basis point funding cap, and 10 second funding interval as `NEAR-PERP`. Insurance is 0. The staleness window is one hour (`3600000000000` nanoseconds). After that hour, a new order that adds risk waits until the feed runs again. Closes and withdrawals stay open. The tick size is `10000`, so one tick is one cent.
+
+One contract is a slice of the asset, chosen so about 300 USDC lands on a whole number of contracts at a round reference price:
+
+| Market      | One contract | Round price | Contracts in 300 USDC |
+| ----------- | ------------ | ----------- | --------------------- |
+| `NEAR-PERP` | 1 NEAR       | $4          | 75                    |
+| `SOL-PERP`  | 0.5 SOL      | $150 a coin | 4                     |
+| `ETH-PERP`  | 0.01 ETH     | $3,000      | 10                    |
+| `BTC-PERP`  | 0.001 BTC    | $100,000    | 3                     |
+| `BNB-PERP`  | 0.1 BNB      | $600        | 5                     |
+| `GOLD-PERP` | 0.1 oz       | $300        | 1                     |
+| `OIL-PERP`  | 1 barrel     | $75         | 4                     |
+| shares      | 1 share      | the print   | as many as 300 covers |
+
+The live feed uses the public price. The ticket takes a USDC amount, turns it into whole contracts at the limit price, and shows the exact cost. At the seeded marks, 300 USDC bought 69 NEAR contracts for $296.70, 6 SOL contracts for $288.36, 13 ETH contracts for $291.59, 3 BTC contracts for $231.63, 4 BNB contracts for $281.48, 2 oil contracts for $205.88, 1 Nvidia share for $204.63, and 1 Amazon share for $240.35. Gold was $388.48 per 0.1 oz, Apple $344.63, Tesla $399.80, and Microsoft $521.90, so 300 USDC was below one contract. The seed traded one contract on those four so the row still has open interest, and the ticket tells a buyer to raise the amount. Initial margin stays 10 percent, so a $296.70 position needs $29.67 of test USDC committed in that market.
+
+`trader-05a557.testnet` sold and `taker-05a557.testnet` bought. The token account minted the collateral. Every row has a price, open interest, and traded volume.
 
 ```sh
-# web/.env.local, written by scripts/e2e.sh
-NEXT_PUBLIC_CONTRACT_ID=marks-05a557.testnet
+./scripts/demo.sh
+./scripts/demo.sh --from-feed
+./scripts/demo.sh --from-list
+./scripts/demo.sh --from-trade
+```
+
+## The board
+
+`web/` is a Next.js app. The index reads `get_markets` and shows symbol, category, price in USDC, funding in plain words, open interest in USDC, and how much has traded. On a market page, a phone shows the price, the chart, and the order book first. The long/short card follows them. From 768 pixels up, the desk fills the window: the chart grows into the space under the market header, the book sits under the chart, and the card stays on the right. The amount field takes USDC. Typing `300` shows the whole contracts that amount buys and the exact USDC those contracts cost. The header switches the board and the wallet between testnet and mainnet. Testnet reads the demo contract. Mainnet stays empty until `NEXT_PUBLIC_MAINNET_CONTRACT_ID` is set.
+
+Sign-in offers a passkey, Google, and the NEAR Connect list used by near.com: NEAR, EVM, Solana, Stellar, TON, and Tron. Google uses [NEAR Auth](https://docs.auth.near.org/) on testnet. The shared testnet client opens an Auth0 window, and Google is one of the choices there. That login derives an implicit testnet account from the MPC key for the Google identity. The first time, `./scripts/auth-fund.sh` sends 0.05 NEAR from `agent-05a557.testnet` so the account can pay gas, and it stops if that agent would drop below 2 NEAR. An order asks NEAR Auth to approve the exact transaction, then `./scripts/auth-sign.sh` submits that approval to `fast-auth.testnet`. The agent pays the signature call. The order itself is signed by the derived key and paid by the implicit account. A NEAR or EVM wallet still signs `commit`, `place_order`, and `cancel_order` directly. Mainnet has no NEAR Auth client in this app.
+
+```sh
+# web/.env.local, written by scripts/demo.sh
+NEXT_PUBLIC_CONTRACT_ID=marks-ffaba5.testnet
+NEXT_PUBLIC_ORACLE_ID=oracle-ffaba5.testnet
 cd web && npm run dev
 ```
 

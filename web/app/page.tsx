@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { dollars, quote } from "@/lib/format";
+import { fundingWords, money, openInterest, price } from "@/lib/format";
 import { contractFor, type Network } from "@/lib/network";
 import { selectedNetwork } from "@/lib/network-server";
 import { view, type Market } from "@/lib/rpc";
@@ -33,8 +33,8 @@ export default async function Board() {
         <div>
           <h1 className="text-3xl font-semibold tracking-tight">Markets</h1>
           <p className="mt-2 max-w-prose text-sm text-muted-foreground">
-            Each row is a listing. The mark comes from the oracle. Open interest is the sum of long
-            lots.
+            Each row is a market. The price is how many USDC one contract costs. Open interest is
+            the USDC still in open positions. Funding is what longs and shorts pay each other.
           </p>
         </div>
         <div className="overflow-x-auto rounded-lg border border-border bg-card">
@@ -43,10 +43,10 @@ export default async function Board() {
               <tr>
                 <th className="px-4 py-3 font-medium">Symbol</th>
                 <th className="px-4 py-3 font-medium">Category</th>
-                <th className="px-4 py-3 font-medium">Mark</th>
+                <th className="px-4 py-3 font-medium">Price</th>
                 <th className="px-4 py-3 font-medium">Funding</th>
                 <th className="px-4 py-3 font-medium">Open interest</th>
-                <th className="px-4 py-3 font-medium">Volume</th>
+                <th className="px-4 py-3 font-medium">Traded</th>
               </tr>
             </thead>
             <tbody>
@@ -62,13 +62,21 @@ export default async function Board() {
                   </td>
                   <td className="px-4 py-4 text-muted-foreground">{market.category}</td>
                   <td className="px-4 py-4 font-mono">
-                    {dollars(market.mark_ticks, market.tick_size)}
+                    {price(market.mark_ticks, market.tick_size)}
                   </td>
-                  <td className="px-4 py-4 font-mono">
+                  <td className="px-4 py-4">
                     <Funding network={network} symbol={market.symbol} />
                   </td>
-                  <td className="px-4 py-4 font-mono">{market.open_interest_lots}</td>
-                  <td className="px-4 py-4 font-mono">{quote(market.volume_quote)}</td>
+                  <td className="px-4 py-4">
+                    <span className="font-mono">
+                      {openInterest(market.open_interest_lots, market.mark_ticks, market.tick_size)}
+                    </span>
+                    <span className="mt-1 block text-xs text-muted-foreground">
+                      {market.open_interest_lots}{" "}
+                      {market.open_interest_lots === 1 ? "contract" : "contracts"}
+                    </span>
+                  </td>
+                  <td className="px-4 py-4 font-mono">{money(market.volume_quote)}</td>
                 </tr>
               ))}
             </tbody>
@@ -85,7 +93,7 @@ export default async function Board() {
 async function Funding({ network, symbol }: { network: Network; symbol: string }) {
   try {
     const rate = await view<number>(network, "get_funding_rate_bps", { symbol });
-    return <>{rate} bps</>;
+    return <>{fundingWords(rate)}</>;
   } catch {
     return <>{"\u2014"}</>;
   }
