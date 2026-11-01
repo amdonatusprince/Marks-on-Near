@@ -1,6 +1,6 @@
 "use client";
 
-import { dollars } from "@/lib/format";
+import { price } from "@/lib/format";
 import type { Level } from "@/lib/rpc";
 
 export function OrderBook({
@@ -19,14 +19,14 @@ export function OrderBook({
   const max = Math.max(1, ...bids.map((level) => level.lots), ...asks.map((level) => level.lots));
   const askRows = [...asks].reverse();
   return (
-    <section className="flex min-h-80 flex-col rounded-lg border border-border bg-card">
+    <section className="flex shrink-0 flex-col rounded-lg border border-border bg-card">
       <h2 className="border-b border-border px-4 py-3 text-sm font-medium">Order book</h2>
       <div className="grid grid-cols-3 px-4 py-2 text-xs text-muted-foreground">
         <span>Price</span>
         <span className="text-right">Size</span>
         <span className="text-right">Total</span>
       </div>
-      <div className="flex flex-1 flex-col justify-end">
+      <div className="flex flex-col">
         {askRows.length === 0 ? (
           <p className="px-4 py-3 text-sm text-muted-foreground">No asks</p>
         ) : null}
@@ -43,7 +43,8 @@ export function OrderBook({
         ))}
       </div>
       <p className="border-y border-border px-4 py-2 font-mono text-lg">
-        {dollars(markTicks, tickSize)}
+        <span className="mr-2 text-xs text-muted-foreground">Price</span>
+        {price(markTicks, tickSize)}
       </p>
       <div>
         {bids.length === 0 ? (
@@ -100,7 +101,7 @@ function LevelRow({
       onClick={() => onPick(side, level.ticks)}
     >
       <span className={`absolute inset-y-0 right-0 ${wash}`} style={{ width }} aria-hidden="true" />
-      <span className={`relative ${tone}`}>{dollars(level.ticks, tickSize)}</span>
+      <span className={`relative ${tone}`}>{price(level.ticks, tickSize)}</span>
       <span className="relative text-right">{level.lots}</span>
       <span className="relative text-right text-muted-foreground">{total}</span>
     </button>

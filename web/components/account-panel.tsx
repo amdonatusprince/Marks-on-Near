@@ -1,7 +1,7 @@
 "use client";
 
 import { DepositPanel } from "@/components/deposit-panel";
-import { quote } from "@/lib/format";
+import { money, quote } from "@/lib/format";
 import { useNear } from "@/lib/near";
 import { viewClient, type Trader } from "@/lib/rpc-client";
 import { useEffect, useId, useState } from "react";
@@ -35,7 +35,7 @@ export function AccountPanel({ symbol }: { symbol: string }) {
   }, [account, network, symbol]);
 
   return (
-    <section className="rounded-lg border border-border bg-card">
+    <section className="shrink-0 rounded-lg border border-border bg-card">
       <div className="flex gap-1 border-b border-border px-2" role="tablist" aria-label="Account">
         {(
           [
@@ -63,7 +63,7 @@ export function AccountPanel({ symbol }: { symbol: string }) {
             className="text-sm text-primary underline-offset-4 hover:underline focus-visible:ring-2 focus-visible:ring-ring"
             onClick={openDialog}
           >
-            Sign in to see this account
+            Sign in to view open positions
           </button>
         ) : tab === "position" ? (
           <Position trader={trader} error={error} symbol={symbol} send={send} />
@@ -103,7 +103,18 @@ function Position({
         <Stat label="Collateral" value={quote(trader.collateral)} />
         <Stat label="Free" value={quote(trader.free_collateral)} />
         <Stat label="Unallocated" value={quote(trader.unallocated)} />
+        <Stat
+          label="Liquidation"
+          value={
+            trader.liquidation_quote_per_lot ? money(trader.liquidation_quote_per_lot) : "None"
+          }
+        />
       </dl>
+      {trader.base_lots !== 0 && trader.liquidation_quote_per_lot ? (
+        <p className="text-xs text-muted-foreground">
+          The position closes if the price reaches {money(trader.liquidation_quote_per_lot)}.
+        </p>
+      ) : null}
       <form
         className="space-y-2"
         onSubmit={(event) => {
