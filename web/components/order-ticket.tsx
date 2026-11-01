@@ -1,8 +1,9 @@
 "use client";
 
-import { dollars, quote } from "@/lib/format";
+import { dollars, liquidationPrice, money, sizedOrder, ticksFromDollars } from "@/lib/format";
+import { contractSize } from "@/lib/markets";
 import { useNear } from "@/lib/near";
-import { useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 
 const control =
   "h-11 w-full rounded-md border border-border bg-background px-3 font-mono placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card";
@@ -13,6 +14,7 @@ export function OrderTicket({
   tickSize,
   price,
   side,
+  maintenanceBps,
   onPrice,
   onSide,
 }: {
@@ -21,26 +23,42 @@ export function OrderTicket({
   tickSize: string;
   price: string;
   side: "bid" | "ask";
+  maintenanceBps: number;
   onPrice: (value: string) => void;
   onSide: (side: "bid" | "ask") => void;
 }) {
   const { account, openDialog, send } = useNear();
   const [kind, setKind] = useState("limit");
-  const [lots, setLots] = useState("");
+  const [amount, setAmount] = useState("300");
+  const [priceText, setPriceText] = useState(shownPrice(price, tickSize));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [hash, setHash] = useState("");
   const priceId = useId();
-  const lotsId = useId();
+  const amountId = useId();
   const priceErrorId = useId();
-  const lotsErrorId = useId();
+  const amountErrorId = useId();
   const [priceError, setPriceError] = useState("");
-  const [lotsError, setLotsError] = useState("");
+  const [amountError, setAmountError] = useState("");
+  const seenPrice = useRef(price);
   const long = side === "bid";
-  const notional = notionalOf(price, lots, tickSize);
+  const ticks = ticksFromDollars(priceText, tickSize);
+  const sized = ticks ? sizedOrder(amount, ticks, tickSize) : null;
+  const entry = sized && sized.lots > BigInt(0) ? sized.cost / sized.lots : null;
+  const liquidation =
+    sized && entry
+      ? liquidationPrice(sized.margin, long ? sized.lots : -sized.lots, entry, maintenanceBps)
+      : null;
+  const unit = contractSize(symbol);
+
+  useEffect(() => {
+    if (price === seenPrice.current) return;
+    seenPrice.current = price;
+    setPriceText(shownPrice(price, tickSize));
+  }, [price, tickSize]);
 
   return (
-    <section className="rounded-lg border border-border bg-card p-4">
+    <section className="rounded-lg border border-border bg-card p-4 md:min-h-full">
       <div className="grid grid-cols-3 gap-2 text-sm" role="tablist" aria-label="Order kind">
         {(
           [
@@ -86,11 +104,16 @@ export function OrderTicket({
         className="mt-4 space-y-4"
         onSubmit={(event) => {
           event.preventDefault();
-          const nextPrice = positive(price) ? "" : "Enter a price in ticks.";
-          const nextLots = positive(lots) ? "" : "Enter a size in lots.";
+          const nextTicks = ticksFromDollars(priceText, tickSize);
+          const nextSized = nextTicks ? sizedOrder(amount, nextTicks, tickSize) : null;
+          const nextPrice = nextTicks ? "" : "Enter a price.";
+          const nextAmount =
+            nextSized && nextSized.lots > BigInt(0)
+              ? ""
+              : "That amount is below one contract at this price.";
           setPriceError(nextPrice);
-          setLotsError(nextLots);
-          if (nextPrice || nextLots) return;
+          setAmountError(nextAmount);
+          if (!nextTicks || !nextSized || nextSized.lots <= BigInt(0)) return;
           if (!account) {
             openDialog();
             return;
@@ -98,7 +121,13 @@ export function OrderTicket({
           setBusy(true);
           setError("");
           setHash("");
-          void send("place_order", { symbol, side, kind, ticks: Number(price), lots: Number(lots) })
+          void send("place_order", {
+            symbol,
+            side,
+            kind,
+            ticks: Number(nextTicks),
+            lots: Number(nextSized.lots),
+          })
             .then((tx) => setHash(tx || "Submitted"))
             .catch((caught) =>
               setError(caught instanceof Error ? caught.message : "The order failed"),
@@ -113,17 +142,25 @@ export function OrderTicket({
           <input
             id={priceId}
             className={control}
-            inputMode="numeric"
+            inputMode="decimal"
             autoComplete="off"
             spellCheck={false}
-            placeholder={String(markTicks)}
-            value={price}
+            placeholder={markTicks ? dollars(markTicks, tickSize) : "0.00"}
+            value={priceText}
             aria-invalid={priceError ? true : undefined}
             aria-describedby={priceError ? priceErrorId : undefined}
-            onChange={(event) => onPrice(event.target.value)}
+            onChange={(event) => {
+              setPriceText(event.target.value);
+              const next = ticksFromDollars(event.target.value, tickSize);
+              if (next) {
+                const text = next.toString();
+                seenPrice.current = text;
+                onPrice(text);
+              }
+            }}
           />
           <p className="mt-1 text-xs text-muted-foreground">
-            {positive(price) ? `${dollars(Number(price), tickSize)} USDC per lot` : "Ticks"}
+            {unit ? `USDC per contract. 1 contract = ${unit}.` : "USDC per contract."}
           </p>
           {priceError ? (
             <p id={priceErrorId} className="mt-1 text-sm text-destructive">
@@ -132,28 +169,33 @@ export function OrderTicket({
           ) : null}
         </div>
         <div>
-          <label htmlFor={lotsId} className="text-sm text-muted-foreground">
-            Size
+          <label htmlFor={amountId} className="text-sm text-muted-foreground">
+            Amount
           </label>
           <input
-            id={lotsId}
+            id={amountId}
             className={control}
-            inputMode="numeric"
+            inputMode="decimal"
             autoComplete="off"
             spellCheck={false}
-            placeholder="1"
-            value={lots}
-            aria-invalid={lotsError ? true : undefined}
-            aria-describedby={lotsError ? lotsErrorId : undefined}
-            onChange={(event) => setLots(event.target.value)}
+            placeholder="300"
+            value={amount}
+            aria-invalid={amountError ? true : undefined}
+            aria-describedby={amountError ? amountErrorId : undefined}
+            onChange={(event) => setAmount(event.target.value)}
           />
           <p className="mt-1 text-xs text-muted-foreground">
-            Lots.{" "}
-            {notional ? `Notional ${notional} USDC` : "Notional appears after price and size."}
+            {sized && sized.lots > BigInt(0)
+              ? `${sized.lots.toString()} ${sized.lots === BigInt(1) ? "contract" : "contracts"}, ${money(sized.cost)}. Margin ${money(sized.margin)}.${
+                  liquidation ? ` Liquidation about ${money(liquidation)}.` : ""
+                }`
+              : sized
+                ? "That amount is below one contract at this price."
+                : "Type a USDC amount. The ticket buys as many whole contracts as that covers."}
           </p>
-          {lotsError ? (
-            <p id={lotsErrorId} className="mt-1 text-sm text-destructive">
-              {lotsError}
+          {amountError ? (
+            <p id={amountErrorId} className="mt-1 text-sm text-destructive">
+              {amountError}
             </p>
           ) : null}
         </div>
@@ -183,12 +225,6 @@ export function OrderTicket({
   );
 }
 
-function positive(value: string) {
-  return /^\d+$/.test(value) && value !== "0";
-}
-
-function notionalOf(ticks: string, lots: string, tickSize: string) {
-  if (!positive(ticks) || !positive(lots)) return "";
-  const atoms = BigInt(ticks) * BigInt(lots) * BigInt(tickSize);
-  return quote(atoms.toString());
+function shownPrice(ticks: string, tickSize: string) {
+  return /^\d+$/.test(ticks) && ticks !== "0" ? dollars(Number(ticks), tickSize) : "";
 }
