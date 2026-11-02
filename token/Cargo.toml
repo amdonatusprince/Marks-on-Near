@@ -1,0 +1,20 @@
+[package]
+name = "marks-token"
+description = "Testnet collateral token for Marks"
+edition = "2021"
+license = "MIT"
+publish = false
+version = "0.1.0"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+near-sdk = "5"
+near-contract-standards = "5"
+
+[dev-dependencies]
+near-sdk = { version = "5", features = ["unit-testing"] }
+
+[profile.release]
+overflow-checks = true
