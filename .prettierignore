@@ -1,0 +1,12 @@
+node_modules
+web/node_modules
+web/.next
+package-lock.json
+web/package-lock.json
+contract/target
+token/target
+**/*.wasm
+scripts/.cache
+**/__pycache__
+web/public
+web/app/favicon.ico
