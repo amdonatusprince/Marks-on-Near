@@ -7,6 +7,7 @@
 
 mod account;
 mod collateral;
+mod debt;
 mod error;
 mod funding;
 mod liquidate;
@@ -79,6 +80,9 @@ impl Exchange {
                 mark_updated_ns: 0,
                 stale_after_ns: u64::MAX,
                 custom_request: None,
+                pending_mark_ticks: 0,
+                pending_index_ticks: 0,
+                pool_repaid: 0,
             },
             traders: BTreeMap::new(),
             orders: BTreeMap::new(),

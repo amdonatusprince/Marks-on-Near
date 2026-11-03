@@ -16,6 +16,10 @@ use near_contract_standards::storage_management::{
 };
 use near_sdk::json_types::U128;
 use near_sdk::{env, near, AccountId, NearToken, PanicOnDefault, PromiseOrValue};
+use std::collections::BTreeMap;
+
+const FAUCET_AMOUNT: u128 = 1_000_000_000;
+const FAUCET_INTERVAL_NS: u64 = 24 * 60 * 60 * 1_000_000_000;
 
 #[near(contract_state)]
 #[derive(PanicOnDefault)]
@@ -23,6 +27,7 @@ pub struct Token {
     token: FungibleToken,
     owner: AccountId,
     metadata: FungibleTokenMetadata,
+    last_faucet_ns: BTreeMap<AccountId, u64>,
 }
 
 #[near]
@@ -31,8 +36,8 @@ impl Token {
     pub fn new(owner_id: AccountId) -> Self {
         let metadata = FungibleTokenMetadata {
             spec: FT_METADATA_SPEC.to_string(),
-            name: "Marks USD".to_string(),
-            symbol: "USDC".to_string(),
+            name: "Marks mock USDC".to_string(),
+            symbol: "mUSDC".to_string(),
             icon: None,
             reference: None,
             reference_hash: None,
@@ -43,7 +48,31 @@ impl Token {
             token: FungibleToken::new(b"a".to_vec()),
             owner: owner_id,
             metadata,
+            last_faucet_ns: BTreeMap::new(),
         }
+    }
+
+    /// Mint 1,000 mUSDC to `account_id`, or to the caller. Anyone may submit the
+    /// claim and pay gas; each recipient can receive once a day.
+    pub fn faucet(&mut self, account_id: Option<AccountId>) {
+        let account_id = account_id.unwrap_or_else(env::predecessor_account_id);
+        let now = env::block_timestamp();
+        if let Some(last) = self.last_faucet_ns.get(&account_id) {
+            if now.saturating_sub(*last) < FAUCET_INTERVAL_NS {
+                env::panic_str("faucet cooldown");
+            }
+        }
+        self.last_faucet_ns.insert(account_id.clone(), now);
+        if !self.token.accounts.contains_key(&account_id) {
+            self.token.internal_register_account(&account_id);
+        }
+        self.token.internal_deposit(&account_id, FAUCET_AMOUNT);
+        FtMint {
+            owner_id: account_id.as_ref(),
+            amount: U128(FAUCET_AMOUNT),
+            memo: Some("faucet"),
+        }
+        .emit();
     }
 
     /// Register the account if needed, then mint. Only the owner can call this.
@@ -238,5 +267,40 @@ mod tests {
             token.ft_balance_of(account("marks.testnet")),
             U128(1 + amount)
         );
+    }
+
+    #[test]
+    fn faucet_mints_one_thousand_then_waits_a_day() {
+        let mut token = token();
+        testing_env!(VMContextBuilder::new()
+            .predecessor_account_id(account("alice.testnet"))
+            .block_timestamp(1_000)
+            .build());
+        token.faucet(None);
+        assert_eq!(
+            token.ft_balance_of(account("alice.testnet")),
+            U128(1_000_000_000)
+        );
+        testing_env!(VMContextBuilder::new()
+            .predecessor_account_id(account("alice.testnet"))
+            .block_timestamp(1_000 + 24 * 60 * 60 * 1_000_000_000)
+            .build());
+        token.faucet(None);
+        assert_eq!(
+            token.ft_balance_of(account("alice.testnet")),
+            U128(2_000_000_000)
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "faucet cooldown")]
+    fn faucet_rejects_a_second_claim_the_same_day() {
+        let mut token = token();
+        testing_env!(VMContextBuilder::new()
+            .predecessor_account_id(account("alice.testnet"))
+            .block_timestamp(1_000)
+            .build());
+        token.faucet(None);
+        token.faucet(None);
     }
 }

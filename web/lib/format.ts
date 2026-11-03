@@ -1,18 +1,33 @@
+/** 1000 → 1,000 and 1000.64 → 1,000.64. Leaves anything that is not a plain number alone. */
+export function grouped(value: bigint | number | string) {
+  const text = typeof value === "number" ? String(value) : value.toString();
+  const match = /^(-?)(\d+)(\.\d+)?$/.exec(text);
+  if (!match) return text;
+  const whole = match[2].replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  return `${match[1]}${whole}${match[3] ?? ""}`;
+}
+
 export function dollars(ticks: number, tickSize: string) {
   const scale = BigInt(1000000);
   const quote = BigInt(ticks) * BigInt(tickSize);
   const whole = quote / scale;
   const frac = (quote % scale).toString().padStart(6, "0").replace(/0+$/, "");
-  return frac ? `${whole}.${frac}` : whole.toString();
+  return frac ? `${grouped(whole)}.${frac}` : grouped(whole);
 }
 
-export function money(atoms: bigint | string) {
+/** Six-decimal atoms as a grouped amount, always with two decimal places: 1,000.64. */
+export function figures(atoms: bigint | string) {
   const value = typeof atoms === "string" ? BigInt(atoms) : atoms;
   const negative = value < BigInt(0);
   const abs = negative ? -value : value;
   const whole = abs / BigInt(1000000);
   const frac = (abs % BigInt(1000000)).toString().padStart(6, "0").slice(0, 2);
-  return `${negative ? "-" : ""}$${whole.toString()}.${frac}`;
+  return `${negative ? "-" : ""}${grouped(whole)}.${frac}`;
+}
+
+export function money(atoms: bigint | string) {
+  const text = figures(atoms);
+  return text.startsWith("-") ? `-$${text.slice(1)}` : `$${text}`;
 }
 
 export function price(ticks: number, tickSize: string) {
@@ -34,11 +49,11 @@ export function quote(atoms: string) {
   const value = BigInt(atoms);
   const whole = value / scale;
   const frac = (value % scale).toString().padStart(2, "0").slice(0, 2);
-  return `${whole}.${frac}`;
+  return `${grouped(whole)}.${frac}`;
 }
 
 export function atomsFromDollars(text: string): bigint | null {
-  const trimmed = text.trim();
+  const trimmed = text.trim().replace(/[$,\s]/g, "");
   if (!/^\d+(\.\d*)?$/.test(trimmed)) return null;
   const [whole, frac = ""] = trimmed.split(".");
   const digits = `${frac}000000`.slice(0, 6);

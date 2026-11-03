@@ -148,6 +148,16 @@ impl Oracle {
     pub fn get_price(&self, asset_id: String) -> Option<Print> {
         self.latest.get(&asset_id).cloned()
     }
+
+    /// First stored print at or after `ts_ns`. Prints are kept in milliseconds.
+    pub fn get_print_after(&self, asset_id: String, ts_ns: u64) -> Option<Print> {
+        let ms = ts_ns / 1_000_000;
+        self.history
+            .get(&asset_id)?
+            .iter()
+            .find(|print| print.timestamp_ms >= ms)
+            .cloned()
+    }
 }
 
 impl Oracle {
@@ -209,6 +219,14 @@ mod tests {
             "7500000000"
         );
         assert!(oracle.get_history("missing".into()).is_empty());
+        assert_eq!(
+            oracle
+                .get_print_after("sol".into(), 2_000_000)
+                .unwrap()
+                .multiplier,
+            "7500000000"
+        );
+        assert!(oracle.get_print_after("sol".into(), 3_000_000).is_none());
     }
 
     #[test]

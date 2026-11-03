@@ -15,14 +15,14 @@ export default function Loading() {
             width: 32,
             height: 32,
             borderRadius: 9999,
-            border: "2px solid #313640",
-            borderTopColor: "#fb923c",
+            border: "2px solid rgba(246, 239, 230, 0.12)",
+            borderTopColor: "#f2b13d",
             display: "block",
           }}
         />
         <p
           className="text-sm text-muted-foreground"
-          style={{ margin: 0, fontSize: 14, color: "#b4b4be" }}
+          style={{ margin: 0, fontSize: 14, color: "#b9aea4" }}
         >
           Loading
         </p>

@@ -8,6 +8,8 @@ export async function GET(request: Request) {
   if (!isCandleSpan(span) || !/^[a-z0-9]{2,8}$/.test(asset)) {
     return NextResponse.json({ error: "Unknown candle size" }, { status: 400 });
   }
-  const chart = await chartCandles(asset, [], span);
-  return NextResponse.json(chart);
+  // A live chart polls every few seconds. Every viewer shares one upstream read.
+  const live = url.searchParams.get("live") === "1";
+  const chart = await chartCandles(asset, [], span, live ? 3_000 : 60_000);
+  return NextResponse.json(chart, { headers: { "cache-control": "no-store" } });
 }

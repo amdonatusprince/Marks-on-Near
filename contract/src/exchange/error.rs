@@ -16,6 +16,7 @@ pub enum ExchangeError {
     UnknownMarket,
     MarkStale,
     InvalidMarket(&'static str),
+    RecipientNotFlat,
     Overflow,
 }
 
@@ -37,6 +38,7 @@ impl std::fmt::Display for ExchangeError {
             Self::UnknownMarket => write!(f, "unknown market"),
             Self::MarkStale => write!(f, "mark is stale"),
             Self::InvalidMarket(reason) => write!(f, "invalid market: {reason}"),
+            Self::RecipientNotFlat => write!(f, "recipient holds a position in this market"),
             Self::Overflow => write!(f, "overflow"),
         }
     }

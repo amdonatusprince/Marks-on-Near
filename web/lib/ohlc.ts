@@ -33,6 +33,20 @@ const LISTINGS: Record<string, { id: string; size: number }> = {
 
 const cache = new Map<string, { at: number; candles: CandleBar[]; note: string }>();
 
+export const SPAN_SECONDS: Record<CandleSpan, number> = {
+  "1m": 60,
+  "15m": 900,
+  "1h": 3600,
+  "1d": 86400,
+};
+
+/** Coinbase's public ticker for the assets it lists, with Marks' contract size. */
+export function streamFor(assetId: string): { product: string; size: number } | null {
+  const product = { near: "NEAR-USD", sol: "SOL-USD", eth: "ETH-USD", btc: "BTC-USD" }[assetId];
+  const listing = LISTINGS[assetId];
+  return product && listing ? { product, size: listing.size } : null;
+}
+
 export function isCandleSpan(value: string | null): value is CandleSpan {
   return value === "1m" || value === "15m" || value === "1h" || value === "1d";
 }
@@ -41,10 +55,11 @@ export async function chartCandles(
   assetId: string,
   prints: { time: number; atoms: string }[],
   span: CandleSpan = "15m",
+  maxAgeMs = 60_000,
 ): Promise<{ candles: CandleBar[]; note: string }> {
   const key = `${assetId}:${span}`;
   const cached = cache.get(key);
-  if (cached && Date.now() - cached.at < 60_000) {
+  if (cached && Date.now() - cached.at < maxAgeMs) {
     return { candles: cached.candles, note: cached.note };
   }
   const listing = LISTINGS[assetId];
@@ -84,7 +99,7 @@ async function yahooCandles(symbol: string, size: number, interval: string, rang
     if (BigInt(bar.volume) > BigInt(0)) traded.push(bar);
   }
   const chosen = traded.length >= 8 ? traded : candles;
-  return chosen.slice(-80);
+  return chosen.slice(-300);
 }
 
 type Quote = {

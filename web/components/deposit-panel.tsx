@@ -1,12 +1,12 @@
 "use client";
 
+import { useToast } from "@/components/toast";
 import { useState } from "react";
 
 export function DepositPanel() {
+  const toast = useToast();
   const [dry, setDry] = useState(true);
   const [busy, setBusy] = useState(false);
-  const [output, setOutput] = useState("");
-  const [error, setError] = useState("");
 
   return (
     <section className="space-y-4">
@@ -31,8 +31,6 @@ export function DepositPanel() {
         className="h-10 rounded-md bg-primary px-4 text-sm text-primary-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-50"
         onClick={() => {
           setBusy(true);
-          setError("");
-          setOutput("");
           void fetch("/api/quote", {
             method: "POST",
             headers: { "content-type": "application/json" },
@@ -46,18 +44,16 @@ export function DepositPanel() {
               if (!response.ok || !body.quote?.amountOut) {
                 throw new Error(body.message ?? "No output amount");
               }
-              setOutput(body.quote.amountOut);
+              toast.success(`Output amount ${body.quote.amountOut}`);
             })
             .catch((caught) =>
-              setError(caught instanceof Error ? caught.message : "The quote failed"),
+              toast.error(caught instanceof Error ? caught.message : "The quote failed"),
             )
             .finally(() => setBusy(false));
         }}
       >
         {busy ? "Requesting quote" : dry ? "Dry quote" : "Live quote"}
       </button>
-      {output ? <p className="font-mono text-sm">Output amount {output}</p> : null}
-      {error ? <p className="text-sm text-destructive">{error}</p> : null}
     </section>
   );
 }

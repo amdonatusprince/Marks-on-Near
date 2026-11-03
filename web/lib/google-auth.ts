@@ -7,6 +7,7 @@ import { createTransaction, encodeTransaction, functionCall } from "near-api-js/
 import { PublicKey } from "near-api-js/lib/utils";
 import { base_decode } from "near-api-js/lib/utils/serialize";
 import jwtDecode from "jwt-decode";
+import { rpcUrl } from "@/lib/network";
 
 const CLIENT_ID = "np8paqIpMWmNbzT4xAvOOapZBjsOpptl";
 const DOMAIN = "login.testnet.fast-auth.com";
@@ -129,7 +130,7 @@ let funding: Promise<void> | null = null;
 function near() {
   nearPromise ??= connect({
     networkId: "testnet",
-    nodeUrl: "https://rpc.testnet.near.org",
+    nodeUrl: rpcUrl("testnet"),
     keyStore: new keyStores.InMemoryKeyStore(),
   });
   return nearPromise;
@@ -214,8 +215,22 @@ async function accessKey(accountId: string, publicKey: string) {
   throw new Error(last);
 }
 
-export async function googleSend(methodName: string, args: object, receiverId: string) {
+export async function googleSend(
+  methodName: string,
+  args: object,
+  receiverId: string,
+  gas: bigint = MARKS_GAS,
+  deposit: bigint = BigInt(0),
+) {
+  return googleSendActions(receiverId, [functionCall(methodName, args, gas, deposit)]);
+}
+
+export async function googleSendActions(
+  receiverId: string,
+  actions: ReturnType<typeof functionCall>[],
+) {
   if (!receiverId) throw new Error("NEXT_PUBLIC_CONTRACT_ID is not set");
+  if (actions.length === 0) throw new Error("The transaction has no actions");
   const signer = await (await client()).getSigner();
   const publicKey = asPublicKey(await signer.getPublicKey());
   const accountId = implicitAccount(publicKey);
@@ -230,7 +245,7 @@ export async function googleSend(methodName: string, args: object, receiverId: s
     publicKey,
     receiverId,
     BigInt(key.nonce) + BigInt(1),
-    [functionCall(methodName, args, MARKS_GAS, BigInt(0))],
+    actions,
     base_decode(block.header.hash),
   );
   await signer.requestTransactionSignature({ transaction });
