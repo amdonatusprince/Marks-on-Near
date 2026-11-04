@@ -40,6 +40,10 @@ pub struct TraderView {
     pub open_bid_lots: u64,
     pub open_ask_lots: u64,
     pub unallocated: U128,
+    pub debt: U128,
+    pub borrow_limit: U128,
+    /// Open gift that holds this position frozen.
+    pub gift_id: Option<u64>,
 }
 
 #[near(serializers = [json])]
