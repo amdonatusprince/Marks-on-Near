@@ -44,8 +44,27 @@ impl Exchange {
             .checked_mul(LIQUIDATION_FEE_BPS)
             .ok_or(ExchangeError::Overflow)?
             / 10_000;
+        let repay = account.debt.min(account.collateral);
+        account.collateral -= repay;
+        account.debt -= repay;
         let paid = fee.min(account.collateral);
         account.collateral -= paid;
+        let short = account.debt;
+        let from_insurance = short.min(self.market.insurance);
+        self.market.insurance -= from_insurance;
+        self.market.pool_repaid = self
+            .market
+            .pool_repaid
+            .checked_add(repay)
+            .ok_or(ExchangeError::Overflow)?
+            .checked_add(from_insurance)
+            .ok_or(ExchangeError::Overflow)?;
+        self.market.bad_debt = self
+            .market
+            .bad_debt
+            .checked_add(short - from_insurance)
+            .ok_or(ExchangeError::Overflow)?;
+        account.debt = 0;
         account.open_bid_lots = 0;
         account.open_ask_lots = 0;
         self.traders.insert(target.clone(), account);
