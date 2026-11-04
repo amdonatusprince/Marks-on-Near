@@ -9,6 +9,10 @@ use super::error::ExchangeError;
 use super::types::{Trader, TraderState};
 use super::Exchange;
 
+fn equity_after_debt(collateral: u128, unrealized: i128, debt: u128) -> Option<i128> {
+    equity(collateral, unrealized)?.checked_sub(i128::try_from(debt).ok()?)
+}
+
 impl Exchange {
     pub fn trader_state(&self, trader: &AccountId) -> Result<TraderState, ExchangeError> {
         let account = self.traders.get(trader).cloned().unwrap_or_default();
@@ -20,7 +24,8 @@ impl Exchange {
             unrealized_pnl(account.base_lots, account.entry_quote_per_lot, mark_quote)
                 .ok_or(ExchangeError::Overflow)?
         };
-        let equity = equity(account.collateral, unrealized).ok_or(ExchangeError::Overflow)?;
+        let equity = equity_after_debt(account.collateral, unrealized, account.debt)
+            .ok_or(ExchangeError::Overflow)?;
         let position_notional = quote_atoms(
             account.base_lots.unsigned_abs(),
             self.market.mark_ticks,
@@ -52,13 +57,14 @@ impl Exchange {
             maintenance_margin,
             free_collateral: free_collateral(account.collateral, equity, initial_margin),
             liquidation_quote_per_lot: math::liquidation_quote_per_lot(
-                account.collateral,
+                account.collateral.saturating_sub(account.debt),
                 account.base_lots,
                 account.entry_quote_per_lot,
                 self.market.maintenance_margin_bps,
             ),
             open_bid_lots: account.open_bid_lots,
             open_ask_lots: account.open_ask_lots,
+            debt: account.debt,
         })
     }
 
@@ -70,7 +76,8 @@ impl Exchange {
             .ok_or(ExchangeError::Overflow)?;
         let unrealized = unrealized_pnl(trader.base_lots, trader.entry_quote_per_lot, mark_quote)
             .ok_or(ExchangeError::Overflow)?;
-        let equity = equity(trader.collateral, unrealized).ok_or(ExchangeError::Overflow)?;
+        let equity = equity_after_debt(trader.collateral, unrealized, trader.debt)
+            .ok_or(ExchangeError::Overflow)?;
         let notional = quote_atoms(
             worst_lots(trader.base_lots, trader.open_bid_lots, trader.open_ask_lots),
             self.market.mark_ticks,
