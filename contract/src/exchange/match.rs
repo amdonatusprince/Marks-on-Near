@@ -200,7 +200,7 @@ impl Exchange {
         self.consume_resting(fill.order_id, fill.lots)
     }
 
-    fn mark_is_stale(&self, now_ns: u64) -> bool {
+    pub(crate) fn mark_is_stale(&self, now_ns: u64) -> bool {
         self.market.mark_updated_ns > 0
             && now_ns.saturating_sub(self.market.mark_updated_ns) > self.market.stale_after_ns
     }
