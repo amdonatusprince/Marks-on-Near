@@ -46,6 +46,11 @@ pub struct Market {
     pub stale_after_ns: u64,
     /// JSON for `custom_call` when this market is not a built-in oracle asset.
     pub custom_request: Option<String>,
+    /// A print outside the 25 percent band, waiting for a second print within 1 percent.
+    pub pending_mark_ticks: u64,
+    pub pending_index_ticks: u64,
+    /// Debt repaid to the lending pool during liquidation, collected by the contract.
+    pub pool_repaid: u128,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, BorshDeserialize, BorshSerialize)]
@@ -58,6 +63,8 @@ pub struct Trader {
     pub open_ask_lots: u64,
     /// Funding index this trader has already been charged through.
     pub last_funding_index: i128,
+    /// Quote atoms borrowed against this position. Repaid before the trader.
+    pub debt: u128,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, BorshDeserialize, BorshSerialize)]
@@ -100,6 +107,7 @@ pub struct TraderState {
     pub liquidation_quote_per_lot: Option<u128>,
     pub open_bid_lots: u64,
     pub open_ask_lots: u64,
+    pub debt: u128,
 }
 
 pub fn validate_market(
