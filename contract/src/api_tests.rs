@@ -28,7 +28,11 @@ fn marks() -> Marks {
 
 fn listed(funding_interval_ns: u64) -> Marks {
     as_account("deployer.testnet");
-    let mut marks = Marks::new(account("usdc.testnet"), account("oracle.testnet"));
+    let mut marks = Marks::new(
+        account("usdc.testnet"),
+        account("oracle.testnet"),
+        account("fees.testnet"),
+    );
     as_account("lister.testnet");
     marks.create_market(
         "NEAR-PERP".into(),
@@ -355,7 +359,11 @@ fn a_crossing_post_only_order_panics_on_the_contract() {
 fn create_market_locks_insurance_and_rejects_a_second_listing() {
     let insurance = 1_000_000u128;
     as_account("usdc.testnet");
-    let mut marks = Marks::new(account("usdc.testnet"), account("oracle.testnet"));
+    let mut marks = Marks::new(
+        account("usdc.testnet"),
+        account("oracle.testnet"),
+        account("fees.testnet"),
+    );
     marks.ft_on_transfer(account("lister.testnet"), U128(insurance), String::new());
     as_account("lister.testnet");
     marks.create_market(
@@ -409,19 +417,18 @@ fn the_first_oracle_price_is_stored_and_a_jump_keeps_the_old_mark() {
         U128(1_000_000_000)
     );
     at("oracle.testnet", 2_000_000_000);
-    let jumped = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        marks.oracle_on_call(
-            account("oracle.testnet"),
-            PriceData {
-                timestamp: "2000000000".into(),
-                recency_duration_sec: 90,
-                prices: vec![price("wrap.testnet", 7), price("wrap.testnet:index", 7)],
-            },
-            "NEAR-PERP".into(),
-        );
-    }));
-    assert!(jumped.is_err());
-    assert_eq!(marks.get_market("NEAR-PERP".into()).mark_ticks, 5);
+    marks.oracle_on_call(
+        account("oracle.testnet"),
+        PriceData {
+            timestamp: "2000000000".into(),
+            recency_duration_sec: 90,
+            prices: vec![price("wrap.testnet", 7), price("wrap.testnet:index", 7)],
+        },
+        "NEAR-PERP".into(),
+    );
+    let market = marks.get_market("NEAR-PERP".into());
+    assert_eq!(market.mark_ticks, 5);
+    assert_eq!(market.mark_updated_ns, U128(1_000_000_000));
     set_mark(&mut marks, 6, 6);
     assert_eq!(marks.get_market("NEAR-PERP".into()).mark_ticks, 6);
 }
@@ -501,7 +508,11 @@ fn a_stale_mark_still_accepts_an_order_that_does_not_add_risk() {
 #[test]
 fn a_custom_price_is_stored_and_a_failed_fetch_leaves_the_mark() {
     as_account("lister.testnet");
-    let mut marks = Marks::new(account("usdc.testnet"), account("oracle.testnet"));
+    let mut marks = Marks::new(
+        account("usdc.testnet"),
+        account("oracle.testnet"),
+        account("fees.testnet"),
+    );
     marks.create_market(
         "XAU-PERP".into(),
         "metal".into(),
