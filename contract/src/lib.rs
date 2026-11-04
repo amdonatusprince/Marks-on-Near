@@ -5,10 +5,19 @@
 //! `withdraw` sends unallocated balance back through the token, and
 //! `on_withdraw` refunds it if the transfer fails. A mark is written only
 //! by the oracle account stored at `new`.
+//!
+//! v2 adds a lending pool (`loans`), shares at the mark (`shares`), capped
+//! calls (`options`) and gifts by link (`gifts`). Every fee goes to the fee
+//! account fixed at `new`.
 
+mod balances;
 mod exchange;
+mod gifts;
+mod loans;
 mod math;
+mod options;
 mod oracle;
+mod shares;
 mod views;
 
 use std::collections::BTreeMap;
@@ -49,6 +58,7 @@ trait PriceOracle {
         msg: String,
         resource_limits: Option<near_sdk::serde_json::Value>,
     );
+    fn get_print_after(&self, asset_id: String, ts_ns: u64);
 }
 
 #[near(contract_state)]
@@ -58,17 +68,27 @@ pub struct Marks {
     collateral_token: AccountId,
     oracle: AccountId,
     unallocated: BTreeMap<AccountId, u128>,
+    fee_account: AccountId,
+    pool: loans::Pool,
+    shares: shares::ShareBook,
+    series: BTreeMap<String, options::Series>,
+    gifts: gifts::GiftBook,
 }
 
 #[near]
 impl Marks {
     #[init]
-    pub fn new(collateral_token: AccountId, oracle: AccountId) -> Self {
+    pub fn new(collateral_token: AccountId, oracle: AccountId, fee_account: AccountId) -> Self {
         Self {
             markets: BTreeMap::new(),
             collateral_token,
             oracle,
             unallocated: BTreeMap::new(),
+            fee_account,
+            pool: loans::Pool::default(),
+            shares: shares::ShareBook::default(),
+            series: BTreeMap::new(),
+            gifts: gifts::GiftBook::default(),
         }
     }
 
@@ -112,22 +132,16 @@ impl Marks {
     }
 
     /// NEP-141 deposit hook. Only the configured collateral token can call it.
-    /// The amount lands in the sender's unallocated balance.
+    /// An empty `msg` credits the sender's unallocated balance; `pool` supplies
+    /// the lending pool; `desk` funds the share desk.
     pub fn ft_on_transfer(&mut self, sender_id: AccountId, amount: U128, msg: String) -> U128 {
-        let _ = msg;
         if env::predecessor_account_id() != self.collateral_token {
             env::panic_str("collateral token only");
         }
         if amount.0 == 0 {
             env::panic_str("size is zero");
         }
-        let balance = self.unallocated.get(&sender_id).copied().unwrap_or(0);
-        self.unallocated.insert(
-            sender_id,
-            balance
-                .checked_add(amount.0)
-                .unwrap_or_else(|| env::panic_str("overflow")),
-        );
+        self.route_deposit(sender_id, amount.0, &msg);
         U128(0)
     }
 
@@ -144,16 +158,11 @@ impl Marks {
     /// Move free collateral from the market back to the unallocated balance.
     pub fn release(&mut self, symbol: String, amount: U128) {
         let trader = env::predecessor_account_id();
+        self.ensure_not_gifted(&symbol, &trader);
         self.book_mut(&symbol).note_time(env::block_timestamp());
         must(self.book_mut(&symbol).settle_funding(&trader).map(|_| ()));
         must(self.book_mut(&symbol).withdraw(&trader, amount.0));
-        let balance = self.unallocated.get(&trader).copied().unwrap_or(0);
-        self.unallocated.insert(
-            trader,
-            balance
-                .checked_add(amount.0)
-                .unwrap_or_else(|| env::panic_str("overflow")),
-        );
+        self.credit_unallocated(&trader, amount.0);
     }
 
     /// Send unallocated balance to the caller through the collateral token.
@@ -177,13 +186,7 @@ impl Marks {
             env::panic_str("withdraw callback only");
         }
         if env::promise_result_checked(0, 1024).is_err() {
-            let balance = self.unallocated.get(&account_id).copied().unwrap_or(0);
-            self.unallocated.insert(
-                account_id,
-                balance
-                    .checked_add(amount.0)
-                    .unwrap_or_else(|| env::panic_str("overflow")),
-            );
+            self.credit_unallocated(&account_id, amount.0);
         }
     }
 
@@ -215,6 +218,21 @@ impl Marks {
         let _ = sender_id;
         if env::predecessor_account_id() != self.oracle {
             env::panic_str("oracle only");
+        }
+        if let Some(share) = msg.strip_prefix("share:") {
+            let print = data
+                .prices
+                .iter()
+                .find(|price| price.asset_id == share)
+                .and_then(|price| price.price.as_ref())
+                .and_then(|price| ticks_from_price(&price.multiplier, price.decimals, 1))
+                .unwrap_or_else(|| env::panic_str("price missing"));
+            let updated = data
+                .timestamp
+                .parse::<u64>()
+                .unwrap_or_else(|_| env::panic_str("price missing"));
+            self.write_share_price(share, u128::from(print), updated);
+            return;
         }
         let tick_size = self.book(&msg).market.tick_size;
         let asset_id = self.book(&msg).market.asset_id.clone();
@@ -288,6 +306,7 @@ impl Marks {
         lots: u64,
     ) -> PlaceResult {
         let trader = env::predecessor_account_id();
+        self.ensure_not_gifted(&symbol, &trader);
         self.book_mut(&symbol).note_time(env::block_timestamp());
         must(
             self.book_mut(&symbol)
@@ -311,8 +330,19 @@ impl Marks {
     /// Close an under-margined position at the mark. Anyone may call it.
     pub fn liquidate(&mut self, symbol: String, account_id: AccountId) {
         let caller = env::predecessor_account_id();
-        self.book_mut(&symbol).note_time(env::block_timestamp());
-        must(self.book_mut(&symbol).liquidate(&caller, &account_id))
+        let book = self.book_mut(&symbol);
+        book.note_time(env::block_timestamp());
+        let debt_before = book
+            .traders
+            .get(&account_id)
+            .map(|trader| trader.debt)
+            .unwrap_or(0);
+        must(book.liquidate(&caller, &account_id));
+        let repaid = book.collect_pool_repaid();
+        if debt_before > 0 {
+            self.settle_liquidated_debt(debt_before, repaid);
+        }
+        self.void_position_gift(&symbol, &account_id);
     }
 
     pub fn get_funding_rate_bps(&self, symbol: String) -> i64 {
@@ -350,7 +380,16 @@ impl Marks {
             liquidation_quote_per_lot: state.liquidation_quote_per_lot.map(U128),
             open_bid_lots: state.open_bid_lots,
             open_ask_lots: state.open_ask_lots,
-            unallocated: U128(self.unallocated.get(&account_id).copied().unwrap_or(0)),
+            unallocated: U128(self.balance_of(&account_id)),
+            debt: U128(state.debt),
+            borrow_limit: U128(
+                self.book(&symbol)
+                    .borrow_limit(&account_id)
+                    .unwrap_or(0)
+                    .saturating_mul(10_000)
+                    / 10_100,
+            ),
+            gift_id: self.frozen_gift(&symbol, &account_id),
         }
     }
 
@@ -373,21 +412,27 @@ impl Marks {
 }
 
 impl Marks {
-    fn book(&self, symbol: &str) -> &Exchange {
+    pub(crate) fn book(&self, symbol: &str) -> &Exchange {
         self.markets
             .get(symbol)
             .unwrap_or_else(|| env::panic_str("unknown market"))
     }
 
-    fn book_mut(&mut self, symbol: &str) -> &mut Exchange {
+    pub(crate) fn book_mut(&mut self, symbol: &str) -> &mut Exchange {
         self.markets
             .get_mut(symbol)
             .unwrap_or_else(|| env::panic_str("unknown market"))
     }
 
     fn write_mark(&mut self, symbol: &str, mark_ticks: u64, index_ticks: u64, updated_ns: u64) {
-        must(self.book_mut(symbol).push_mark(mark_ticks, index_ticks));
-        self.book_mut(symbol).market.mark_updated_ns = updated_ns;
+        match self.book_mut(symbol).push_mark(mark_ticks, index_ticks) {
+            Ok(()) => self.book_mut(symbol).market.mark_updated_ns = updated_ns,
+            Err(ExchangeError::MarkDeviation) => balances::emit(
+                "mark_pending",
+                near_sdk::serde_json::json!({ "symbol": symbol, "mark_ticks": mark_ticks }),
+            ),
+            Err(error) => env::panic_str(&error.to_string()),
+        }
     }
 
     fn market_view(&self, symbol: &str) -> MarketView {
@@ -411,27 +456,13 @@ impl Marks {
             mark_updated_ns: U128(u128::from(market.mark_updated_ns)),
         }
     }
-
-    fn take_unallocated(&mut self, trader: &AccountId, amount: u128) {
-        if amount == 0 {
-            env::panic_str("size is zero");
-        }
-        let balance = self.unallocated.get(trader).copied().unwrap_or(0);
-        if balance < amount {
-            env::panic_str("insufficient collateral");
-        }
-        let left = balance - amount;
-        if left == 0 {
-            self.unallocated.remove(trader);
-        } else {
-            self.unallocated.insert(trader.clone(), left);
-        }
-    }
 }
 
-fn must<T>(result: Result<T, ExchangeError>) -> T {
+pub(crate) fn must<T>(result: Result<T, ExchangeError>) -> T {
     result.unwrap_or_else(|error| env::panic_str(&error.to_string()))
 }
 
 #[cfg(test)]
 mod api_tests;
+#[cfg(test)]
+mod v2_tests;
