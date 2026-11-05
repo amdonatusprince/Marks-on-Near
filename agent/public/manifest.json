@@ -1,0 +1,20 @@
+{
+  "name": "Marks",
+  "short_name": "Marks",
+  "description": "Perpetual futures, tokenized shares and capped calls on NEAR, with an agent beside the desk. Borrow against a position, and send a share or a position to a friend as a link.",
+  "start_url": "./",
+  "background_color": "#0e0809",
+  "theme_color": "#0e0809",
+  "icons": [
+    {
+      "src": "icon-192.svg",
+      "sizes": "192x192",
+      "type": "image/svg+xml"
+    },
+    {
+      "src": "icon-512.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml"
+    }
+  ]
+}

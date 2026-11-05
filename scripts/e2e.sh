@@ -46,7 +46,7 @@ expect() {
 }
 
 if [[ "${1:-}" == "--continue" || "${1:-}" == "--from-deposit" || "${1:-}" == "--from-list" || "${1:-}" == "--from-trade" || "${1:-}" == "--from-cross" || "${1:-}" == "--from-fill" || "${1:-}" == "--from-funding" || "${1:-}" == "--from-flatten" ]]; then
-  step "Continuing with the accounts already in scripts/testnet.env"
+  step "Continuing with the accounts already in .env"
   load_testnet
 else
   step "Accounts"
@@ -310,7 +310,8 @@ else
   echo "Gold fetch did not return a price. No XAU-PERP row was created."
 fi
 
-printf 'NEXT_PUBLIC_CONTRACT_ID=%s\nNEXT_PUBLIC_INTENTS_RECIPIENT=marks.near\n' "${CONTRACT_ID}" > "${ROOT}/web/.env.local"
+env_set VITE_CONTRACT_ID "${CONTRACT_ID}"
+env_set VITE_INTENTS_RECIPIENT "${VITE_INTENTS_RECIPIENT:-marks.near}"
 echo
 echo "Board contract: ${CONTRACT_ID}"
 echo "https://testnet.nearblocks.io/address/${CONTRACT_ID}"

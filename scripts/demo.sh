@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Create the demo feed and the twelve markets, then trade about 300 USDC
-# on each. This appends account ids to scripts/testnet.env. It does not
+# on each. This writes account ids into .env. It does not
 # run create-accounts.sh and it does not replace the original market.
 #
 #   ./scripts/demo.sh
@@ -29,25 +29,9 @@ fi
 "${ROOT}/scripts/demo-trade.sh"
 
 load_testnet
-python3 - "${ROOT}/web/.env.local" "${DEMO_CONTRACT_ID}" "${DEMO_ORACLE_ID}" <<'PY'
-import sys
-from pathlib import Path
-
-path, contract, oracle = sys.argv[1:]
-file = Path(path)
-lines = file.read_text().splitlines() if file.exists() else []
-kept = [
-    line
-    for line in lines
-    if not line.startswith("NEXT_PUBLIC_CONTRACT_ID=")
-    and not line.startswith("NEXT_PUBLIC_ORACLE_ID=")
-]
-kept.insert(0, f"NEXT_PUBLIC_ORACLE_ID={oracle}")
-kept.insert(0, f"NEXT_PUBLIC_CONTRACT_ID={contract}")
-if not any(line.startswith("NEXT_PUBLIC_INTENTS_RECIPIENT=") for line in kept):
-    kept.append("NEXT_PUBLIC_INTENTS_RECIPIENT=marks.near")
-file.write_text("\n".join(kept) + "\n")
-PY
+env_set VITE_CONTRACT_ID "${DEMO_CONTRACT_ID}"
+env_set VITE_ORACLE_ID "${DEMO_ORACLE_ID}"
+env_set VITE_INTENTS_RECIPIENT "${VITE_INTENTS_RECIPIENT:-marks.near}"
 
 echo "Board env points at ${DEMO_CONTRACT_ID}"
 echo "Oracle: https://testnet.nearblocks.io/address/${DEMO_ORACLE_ID}"

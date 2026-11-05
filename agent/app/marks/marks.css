@@ -1,0 +1,469 @@
+/* Palette, type and grain from Moi (MIT, github.com/ramakrishnanhulk20/Moi). See NOTICE. */
+:root {
+  --bg: #0e0809;
+  --bg-raised: #1a1012;
+  --ink: #f6efe6;
+  --ink-muted: #b9aea4;
+  --gold: #f2b13d;
+  --gold-deep: #c8891e;
+  --maroon: #4a1420;
+  --line: rgba(246, 239, 230, 0.12);
+  --ok: #3fb8a6;
+  --pending: #8fa3b8;
+  --error: #c46a86;
+
+  --bid: var(--ok);
+  --bid-foreground: #04201c;
+  --ask: var(--error);
+  --ask-foreground: #2a0a14;
+  color-scheme: dark;
+}
+
+@theme {
+  --font-display: "Fraunces Variable", Georgia, "Times New Roman", serif;
+  --font-body: "Manrope Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-mono:
+    "JetBrains Mono Variable", ui-monospace, SFMono-Regular, Menlo, Consolas,
+    monospace;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-bg-raised: var(--bg-raised);
+  --color-ink: var(--ink);
+  --color-ink-muted: var(--ink-muted);
+  --color-gold: var(--gold);
+  --color-gold-deep: var(--gold-deep);
+  --color-maroon: var(--maroon);
+  --color-line: var(--line);
+  --color-ok: var(--ok);
+  --color-pending: var(--pending);
+  --color-error: var(--error);
+  --color-bid: var(--bid);
+  --color-bid-foreground: var(--bid-foreground);
+  --color-ask: var(--ask);
+  --color-ask-foreground: var(--ask-foreground);
+}
+
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-body);
+}
+
+:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}
+
+/* Mono labels: uppercase, wide tracking, as in Moi's hero meta line. */
+.label-mono {
+  color: var(--ink-muted);
+  font: 400 12px/1.7 var(--font-mono);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.display {
+  font-family: var(--font-display);
+  font-weight: 900;
+  letter-spacing: -0.035em;
+  line-height: 0.95;
+}
+
+.display-italic {
+  color: var(--gold);
+  font-style: italic;
+}
+
+.btn-gold,
+.btn-line {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  padding: 12px 20px;
+  font-weight: 700;
+  line-height: 1.2;
+  transition:
+    background-color 150ms,
+    border-color 150ms,
+    transform 150ms;
+}
+
+.btn-gold {
+  background: var(--gold);
+  color: var(--bg);
+}
+
+.btn-gold:hover:not(:disabled) {
+  background: var(--gold-deep);
+  transform: translateY(-1px);
+}
+
+.btn-line {
+  border: 1px solid var(--line);
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.btn-line:hover:not(:disabled) {
+  border-color: var(--ink);
+}
+
+.btn-gold:disabled,
+.btn-line:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.panel {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--bg-raised);
+}
+
+.field {
+  width: 100%;
+  min-height: 44px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg);
+  padding: 10px 12px;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.field:focus-visible {
+  border-color: var(--gold);
+  outline: none;
+}
+
+.stage-light {
+  background-image:
+    radial-gradient(
+      60% 60% at 70% 30%,
+      rgba(242, 177, 61, 0.12),
+      transparent 70%
+    ),
+    radial-gradient(
+      40% 40% at 15% 85%,
+      color-mix(in srgb, var(--maroon) 45%, transparent),
+      transparent 70%
+    );
+}
+
+.grain {
+  position: fixed;
+  inset: -8px;
+  z-index: 60;
+  background-size: 240px 240px;
+  mix-blend-mode: overlay;
+  opacity: 0.06;
+  pointer-events: none;
+  animation: grain-jitter 0.5s steps(2) infinite;
+}
+
+@keyframes grain-jitter {
+  0% {
+    transform: translate(0, 0);
+  }
+  50% {
+    transform: translate(-2px, 1px);
+  }
+  100% {
+    transform: translate(1px, -2px);
+  }
+}
+
+input,
+select,
+button {
+  font: inherit;
+}
+
+.marks-spin {
+  width: 32px;
+  height: 32px;
+  border-radius: 9999px;
+  border: 2px solid var(--line);
+  border-top-color: var(--gold);
+  animation: marks-spin 0.7s linear infinite;
+}
+
+@keyframes marks-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.marks-live {
+  animation: marks-live 1.4s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+.marks-chart-in {
+  animation: marks-chart-in 360ms cubic-bezier(0, 0, 0.2, 1) both;
+}
+
+@keyframes marks-chart-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.marks-flash-up {
+  animation: marks-flash-up 700ms cubic-bezier(0, 0, 0.2, 1);
+}
+
+.marks-flash-down {
+  animation: marks-flash-down 700ms cubic-bezier(0, 0, 0.2, 1);
+}
+
+@keyframes marks-flash-up {
+  from {
+    background: color-mix(in oklab, var(--bid) 35%, transparent);
+  }
+}
+
+@keyframes marks-flash-down {
+  from {
+    background: color-mix(in oklab, var(--ask) 35%, transparent);
+  }
+}
+
+/* The perp desk. Phone: one column. Tablet: chart full width, then book beside
+   the ticket. Desktop: chart, book and ticket side by side, filling the window. */
+.desk {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas: "head" "chart" "book" "ticket" "account";
+}
+
+.desk-head {
+  grid-area: head;
+}
+
+.desk-chart {
+  grid-area: chart;
+  min-width: 0;
+}
+
+.desk-book {
+  grid-area: book;
+  min-width: 0;
+}
+
+.desk-ticket {
+  grid-area: ticket;
+  min-width: 0;
+}
+
+.desk-account {
+  grid-area: account;
+  min-width: 0;
+}
+
+@media (min-width: 768px) {
+  .desk {
+    grid-template-columns: minmax(0, 1fr) 21rem;
+    grid-template-areas: "head head" "chart chart" "book ticket" "account account";
+    align-items: start;
+  }
+}
+
+@media (min-width: 1280px) {
+  .desk {
+    height: calc(100dvh - 6rem);
+    min-height: 40rem;
+    grid-template-columns: minmax(0, 1fr) 18rem 21rem;
+    grid-template-rows: auto minmax(0, 1fr) minmax(0, 14rem);
+    grid-template-areas: "head head ticket" "chart book ticket" "account book ticket";
+    align-items: stretch;
+  }
+
+  .desk-book,
+  .desk-ticket,
+  .desk-account {
+    min-height: 0;
+    overflow-y: auto;
+  }
+}
+
+@keyframes marks-live {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+/* Ambient light behind every page: three soft orbs drifting on long, offset loops */
+.ambient {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.ambient-orb {
+  position: absolute;
+  width: 60vmax;
+  height: 60vmax;
+  border-radius: 50%;
+  filter: blur(80px);
+  opacity: 0.5;
+  will-change: transform;
+}
+
+.ambient-orb-a {
+  top: -25vmax;
+  left: -15vmax;
+  background: radial-gradient(
+    closest-side,
+    rgba(242, 177, 61, 0.14),
+    transparent
+  );
+  animation: ambient-drift-a 26s ease-in-out infinite alternate;
+}
+
+.ambient-orb-b {
+  right: -20vmax;
+  top: 20vh;
+  background: radial-gradient(
+    closest-side,
+    color-mix(in srgb, var(--maroon) 70%, transparent),
+    transparent
+  );
+  animation: ambient-drift-b 32s ease-in-out infinite alternate;
+}
+
+.ambient-orb-c {
+  bottom: -30vmax;
+  left: 25vw;
+  background: radial-gradient(
+    closest-side,
+    rgba(63, 184, 166, 0.08),
+    transparent
+  );
+  animation: ambient-drift-c 38s ease-in-out infinite alternate;
+}
+
+@keyframes ambient-drift-a {
+  to {
+    transform: translate(30vw, 25vh) scale(1.2);
+  }
+}
+
+@keyframes ambient-drift-b {
+  to {
+    transform: translate(-35vw, 30vh) scale(0.85);
+  }
+}
+
+@keyframes ambient-drift-c {
+  to {
+    transform: translate(-20vw, -40vh) scale(1.15);
+  }
+}
+
+/* Cards and headings rise into place as they scroll into view, where the browser supports it */
+@supports (animation-timeline: view()) {
+  .sec-title,
+  .sec-lede,
+  .how-frame,
+  .market-board-reveal {
+    animation: marks-rise linear both;
+    animation-timeline: view();
+    animation-range: entry 0% entry 60%;
+  }
+}
+
+@keyframes marks-rise {
+  from {
+    opacity: 0;
+    transform: translateY(32px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ambient-orb,
+  .sec-title,
+  .sec-lede,
+  .how-frame,
+  .market-board-reveal {
+    animation: none !important;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Marks pages scroll the window, which the hero pin and Lenis depend on, so the agent shell grows with the page and the docked panel stays in view. */
+.marks-app {
+  container-type: inline-size;
+  container-name: marks;
+  width: 100%;
+  min-width: 0;
+}
+
+.agent-sidebar-shell:has(.marks-app) {
+  height: auto;
+  min-height: 100dvh;
+  overflow: visible;
+  align-items: flex-start;
+}
+
+.agent-sidebar-shell:has(.marks-app) > .agent-sidebar-main-surface {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: visible;
+}
+
+.agent-sidebar-shell:has(.marks-app)
+  > .agent-sidebar-panel[data-agent-sidebar-layout="desktop"] {
+  position: sticky;
+  top: 0;
+  align-self: flex-start;
+  height: 100dvh;
+  min-height: 100dvh;
+  max-height: 100dvh;
+  overflow: hidden;
+  overscroll-behavior: contain;
+}
+
+.agent-sidebar-shell:has(.marks-app) .message-scroller-viewport {
+  overscroll-behavior: contain;
+}
+
+.agent-sidebar-shell:has(.marks-app) > .agent-sidebar-resize-handle {
+  position: sticky;
+  top: 0;
+  align-self: flex-start;
+  height: 100dvh;
+}
+
+.agent-sidebar-shell:has(.marks-app)
+  > .agent-sidebar-panel
+  > .agent-sidebar-panel-inner {
+  height: 100%;
+  min-height: 100%;
+}

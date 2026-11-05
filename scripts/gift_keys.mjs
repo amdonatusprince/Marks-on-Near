@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// One-time gift claim keys, the same scheme the web app uses.
+// One-time gift claim keys, the same scheme the app uses.
 //   node scripts/gift_keys.mjs new <contract> <sender>
 //     prints {"secret","claim_key","key_proof"} as JSON
 //   node scripts/gift_keys.mjs claim <contract> <secret> <gift_id> <recipient>

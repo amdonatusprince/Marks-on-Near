@@ -382,6 +382,30 @@ fn a_key_registers_only_with_its_own_proof() {
 }
 
 #[test]
+fn the_sender_cancels_an_open_gift_and_the_link_dies() {
+    let mut marks = desk();
+    deposit(&mut marks, "alice.testnet", 100 * USD, "");
+    let (id, _) = gift_usdc(&mut marks, 7, 50 * USD);
+    at("alice.testnet", 21);
+    marks.cancel_gift(id);
+    assert_eq!(balance(&marks, "alice.testnet"), 99_500_000);
+    assert_eq!(marks.get_gift(id).unwrap().status, GiftStatus::Refunded);
+}
+
+#[test]
+#[should_panic(expected = "gift is closed")]
+fn a_cancelled_gift_cannot_be_claimed() {
+    let mut marks = desk();
+    deposit(&mut marks, "alice.testnet", 100 * USD, "");
+    let (id, key) = gift_usdc(&mut marks, 7, 50 * USD);
+    at("alice.testnet", 21);
+    marks.cancel_gift(id);
+    let signature = claim_signature(&key, id, "bob.testnet");
+    at("relayer.testnet", 22);
+    marks.claim_gift(id, account("bob.testnet"), signature);
+}
+
+#[test]
 fn the_sender_takes_an_unclaimed_gift_back_after_expiry() {
     let mut marks = desk();
     deposit(&mut marks, "alice.testnet", 100 * USD, "");

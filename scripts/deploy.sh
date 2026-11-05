@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build the wasm and deploy it to the contract account in scripts/testnet.env.
+# Build the wasm and deploy it to the contract account in .env.
 #
 # First deploy, which also calls new():
 #   ./scripts/deploy.sh
