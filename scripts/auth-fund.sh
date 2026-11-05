@@ -59,6 +59,58 @@ if ! at_least "${AGENT}" 2000000000000000000000000; then
   exit 1
 fi
 
-near_exec tokens "${AGENT_ID}" send-near "${ACCOUNT}" "0.05 NEAR" \
-  network-config testnet sign-with-keychain send
+# A brand-new implicit account is not on testnet yet. near-cli stops to ask
+# "Do you want to proceed?" and, without a terminal, prints the warning and exits.
+# The first choice is yes. Answer it, so the 0.05 NEAR creates the account.
+BIN="$(near_bin)"
+python3 - "$BIN" "${AGENT_ID}" "${ACCOUNT}" <<'PY'
+import os
+import pty
+import select
+import sys
+
+binary, agent, account = sys.argv[1:]
+command = [
+    "npx",
+    "--yes",
+    "near-cli-rs",
+] if binary == "npx" else [binary]
+command += [
+    "tokens",
+    agent,
+    "send-near",
+    account,
+    "0.05 NEAR",
+    "network-config",
+    "testnet",
+    "sign-with-keychain",
+    "send",
+]
+pid, fd = pty.fork()
+if pid == 0:
+    os.execvp(command[0], command)
+confirmed = False
+pending = b""
+while True:
+    ready, _, _ = select.select([fd], [], [], 90)
+    if not ready:
+        os.kill(pid, 15)
+        sys.stderr.write("The testnet transfer timed out.\n")
+        sys.exit(1)
+    try:
+        chunk = os.read(fd, 4096)
+    except OSError:
+        break
+    if not chunk:
+        break
+    pending += chunk
+    sys.stdout.buffer.write(chunk)
+    sys.stdout.buffer.flush()
+    if not confirmed and b"Do you want to proceed?" in pending:
+        os.write(fd, b"\r")
+        confirmed = True
+os.close(fd)
+_, status = os.waitpid(pid, 0)
+sys.exit(os.waitstatus_to_exitcode(status))
+PY
 echo "FUNDED"
