@@ -1,0 +1,5 @@
+The Python tools in this folder are the Day Trader skill
+(https://github.com/Jakeschincariol/day-trader-skill), MIT License,
+Copyright (c) 2026 Jake Schincariol. The LICENSE file next to this notice
+is that license. Marks runs them on the listed desk names, and a fill still
+goes through the person's NEAR wallet on Marks, never Alpaca.

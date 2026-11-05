@@ -16,6 +16,7 @@ const INITIAL_TOOL_NAMES = [
   "send-gift",
   "trade-shares",
   "refresh-price",
+  "day-trade",
   "borrow-usdc",
   "move-usdc",
   "commit-margin",
@@ -50,6 +51,7 @@ Writing: every website button has a tool. Call it directly with its named fields
 - Perps: plan-order, show the plan, then place-order with the plan's ticket fields (symbol, side, kind, price, amount).
 - Shares: list-shares, then trade-shares { side, assetId, amount }.
 - Oracle: refresh-price { kind: "share", id: "xau" } or { kind: "market", id: "BNB-PERP" } when they ask to refresh a price. It is its own signature and costs 0.02 NEAR. Do not tell them the desk has no refresh action.
+- Day trade: day-trade { step }. Scan the Marks names (scan or orb), then news, entry, exit, timemachine, budget, risk, ticket. A hit is a chart that matched a rule, not a buy. Prices come from Yahoo through that tool, never invented. After risk PASSes, show the ticket and wait for an explicit yes, then trade-shares or plan-order/place-order on Marks. Never Alpaca. Not financial advice.
 - Loans: borrow-usdc. Faucet, deposit, withdraw: move-usdc. Margin: commit-margin. Orders: cancel-order. Calls: place-option, settle-option. Expired gifts: refund-gift.
 
 How a write runs: the tool returns { jobId, status: "waiting" } at once and puts a card on the Marks tab. Tell them in one line to press Open wallet on the Marks tab and sign. Then, in the same turn, call check-desk-job with that exact jobId, every time. It holds up to 50 seconds; if it comes back waiting or signing, call it again with the same jobId, up to 6 times, before you end your turn. Never end the turn on a single waiting result. A stale share price adds a refresh card first, so tell them a second card may follow. When done, report result.explorer and, for gifts, result.link exactly as returned (the secret is in the hash; never change it). If error, say the error plainly and fix the input or offer the next step.

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Restamp every v2 market before its one-hour window closes.
+# Restamp stale v2 markets and shares every 30 minutes, oldest first.
 # Each refresh attaches 0.02 NEAR. The agent pays while it can stay above
-# 2 NEAR; otherwise the contract account pays and keeps 1 NEAR in reserve.
+# 1 NEAR; otherwise the contract account pays and keeps 1 NEAR in reserve.
 #   ./scripts/v2-keep.sh
 #   ./scripts/v2-keep.sh --loop
 
@@ -24,8 +24,8 @@ acquire_lock() {
 }
 
 RPC="${MARKS_RPC:-https://test.rpc.fastnear.com}"
-LEAD="${MARKS_KEEP_LEAD:-2700}"
-AGENT_FLOOR="2000000000000000000000000"
+LEAD="${MARKS_KEEP_LEAD:-1800}"
+AGENT_FLOOR="1000000000000000000000000"
 CONTRACT_FLOOR="1000000000000000000000000"
 FEE="20000000000000000000000"
 CUSHION="50000000000000000000000"
@@ -46,18 +46,24 @@ def call(method, params):
     return payload["result"]
 
 if kind == "markets":
-    result = call("query", {
-        "request_type": "call_function",
-        "finality": "final",
-        "account_id": contract,
-        "method_name": "get_markets",
-        "args_base64": base64.b64encode(b"{}").decode(),
-    })
-    markets = json.loads(bytes(result["result"]).decode())
     now = time.time() * 1_000_000_000
-    for market in markets:
+
+    def view(method):
+        result = call("query", {
+            "request_type": "call_function",
+            "finality": "final",
+            "account_id": contract,
+            "method_name": method,
+            "args_base64": base64.b64encode(b"{}").decode(),
+        })
+        return json.loads(bytes(result["result"]).decode())
+
+    for market in view("get_markets"):
         age = max(0, int((now - int(market["mark_updated_ns"])) / 1_000_000_000))
-        print(f"{market['symbol']} {age}")
+        print(f"refresh_mark {market['symbol']} {age}")
+    for share in view("get_shares"):
+        age = max(0, int((now - int(share["updated_ns"])) / 1_000_000_000))
+        print(f"refresh_share {share['asset_id']} {age}")
 elif kind == "balance":
     result = call("query", {
         "request_type": "view_account",
@@ -71,14 +77,14 @@ PY
 }
 
 oldest_age() {
-  local oldest=-1 age
-  while read -r _ age; do
+  local oldest=-1 method id age
+  while read -r method id age; do
     if (( age > oldest )); then
       oldest=$age
     fi
   done < <(chain markets "${V2_CONTRACT_ID}" "${RPC}")
   if (( oldest < 0 )); then
-    echo "No markets to refresh." >&2
+    echo "No prices to refresh." >&2
     return 1
   fi
   printf '%s\n' "${oldest}"
@@ -108,32 +114,41 @@ elif contract_balance - cost >= contract_floor:
 else:
     raise SystemExit(
         f"Need {cost / 1e24:.2f} NEAR. "
-        f"Agent has {agent_balance / 1e24:.2f} and keeps 2. "
+        f"Agent has {agent_balance / 1e24:.2f} and keeps 1. "
         f"Contract has {contract_balance / 1e24:.2f} and keeps 1."
     )
 PY
 }
 
 refresh_all() {
-  local symbols=() symbol age signer
-  while read -r symbol age; do
-    symbols+=("${symbol}")
+  local due=() method id age signer count args
+  while read -r method id age; do
+    if (( age >= LEAD )); then
+      due+=("${method} ${id}")
+    fi
   done < <(chain markets "${V2_CONTRACT_ID}" "${RPC}")
-  if (( ${#symbols[@]} == 0 )); then
-    echo "No markets to refresh." >&2
+  if (( ${#due[@]} == 0 )); then
+    echo "No stale prices to refresh." >&2
     return 1
   fi
-  if ! signer="$(payer "${#symbols[@]}")"; then
+  if ! signer="$(payer "${#due[@]}")"; then
     echo "Skipping this pass. ${signer}" >&2
     return 0
   fi
-  echo "Refreshing ${#symbols[@]} markets as ${signer}"
-  for symbol in "${symbols[@]}"; do
-    echo "Refreshing ${symbol}"
-    if attempt near_call "${V2_CONTRACT_ID}" refresh_mark "{\"symbol\":\"${symbol}\"}" "${signer}" "0.02 NEAR" "300 Tgas"; then
+  echo "Refreshing ${#due[@]} prices as ${signer}"
+  for row in "${due[@]}"; do
+    method="${row%% *}"
+    id="${row#* }"
+    if [[ "${method}" == "refresh_share" ]]; then
+      args="{\"asset_id\":\"${id}\"}"
+    else
+      args="{\"symbol\":\"${id}\"}"
+    fi
+    echo "Refreshing ${id}"
+    if attempt near_call "${V2_CONTRACT_ID}" "${method}" "${args}" "${signer}" "0.02 NEAR" "300 Tgas"; then
       show_tx "${LAST}"
     else
-      echo "Refresh failed for ${symbol}" >&2
+      echo "Refresh failed for ${id}" >&2
     fi
   done
 }
@@ -141,7 +156,7 @@ refresh_all() {
 acquire_lock
 
 if [[ "${1:-}" == "--loop" ]]; then
-  echo "Keeping ${V2_CONTRACT_ID} marks inside the hour."
+  echo "Keeping ${V2_CONTRACT_ID} marks and shares inside ${LEAD}s."
   while true; do
     if ! age="$(oldest_age)"; then
       sleep 300
@@ -149,7 +164,7 @@ if [[ "${1:-}" == "--loop" ]]; then
     fi
     if (( age < LEAD )); then
       wait=$((LEAD - age))
-      echo "Marks are ${age}s old. Next refresh in ${wait}s."
+      echo "Prices are ${age}s old. Next refresh in ${wait}s."
       sleep "${wait}"
       continue
     fi
@@ -160,7 +175,7 @@ fi
 
 age="$(oldest_age)"
 if (( age < LEAD )); then
-  echo "Marks are ${age}s old, inside the ${LEAD}s lead. Nothing to refresh."
+  echo "Prices are ${age}s old, inside the ${LEAD}s lead. Nothing to refresh."
   exit 0
 fi
 refresh_all

@@ -6,16 +6,23 @@ import { access } from "fs/promises";
 import os from "os";
 import path from "path";
 
-const LEAD_SEC = 45 * 60;
+const LEAD_SEC = Number(process.env.MARKS_KEEP_LEAD || 30 * 60);
 const FEE = BigInt("20000000000000000000000");
 const CUSHION = BigInt("50000000000000000000000");
-const AGENT_FLOOR = BigInt("2000000000000000000000000");
+const AGENT_FLOOR = BigInt("1000000000000000000000000");
 const CONTRACT_FLOOR = BigInt("1000000000000000000000000");
 const GAS = BigInt("300000000000000");
 
 const state = globalThis as typeof globalThis & { marksKeeper?: boolean };
 
 type Market = { symbol: string; mark_updated_ns: string };
+type Share = { asset_id: string; updated_ns: string | number };
+type Job = {
+  label: string;
+  methodName: "refresh_mark" | "refresh_share";
+  args: Record<string, string>;
+  ageSec: number;
+};
 
 /** Start the price keeper inside this server process. A second call does nothing. */
 export function startKeeper() {
@@ -64,45 +71,54 @@ async function loop(account: string, secret: string) {
 
 async function tick(account: string, secret: string) {
   const contract = MARKS_CONTRACT;
-  const rows = await markets(contract);
-  const oldest = rows.reduce((age, row) => Math.max(age, row.ageSec), 0);
+  const rows = await prices(contract);
   if (rows.length === 0) return 300_000;
-  if (oldest < LEAD_SEC) {
-    const wait = (LEAD_SEC - oldest) * 1000;
+  const due = rows.filter((row) => row.ageSec >= LEAD_SEC);
+  if (due.length === 0) {
+    const oldest = rows.reduce((age, row) => Math.max(age, row.ageSec), 0);
+    const wait = Math.max(60, LEAD_SEC - oldest) * 1000;
     console.log(
-      `[marks-keep] marks are ${oldest}s old. Next refresh in ${Math.round(wait / 1000)}s.`,
+      `[marks-keep] prices are ${oldest}s old. Next refresh in ${Math.round(wait / 1000)}s.`,
     );
     return wait;
   }
   const balance = await yocto(account);
-  const cost = FEE * BigInt(rows.length) + CUSHION;
-  const floor = account === contract ? CONTRACT_FLOOR : AGENT_FLOOR;
-  if (balance - cost < floor) {
+  const room = affordable(balance, account === contract);
+  if (room < 1) {
     console.error(
-      `[marks-keep] ${account} has ${(Number(balance) / 1e24).toFixed(2)} NEAR, which is short of this pass.`,
+      `[marks-keep] ${account} has ${(Number(balance) / 1e24).toFixed(2)} NEAR, which is short of a 0.02 NEAR refresh.`,
     );
     return 30 * 60 * 1000;
   }
+  const batch = due.slice(0, room);
   const signer = await nearAccount(account, secret);
-  console.log(`[marks-keep] refreshing ${rows.length} markets as ${account}`);
-  for (const row of rows) {
+  console.log(
+    `[marks-keep] refreshing ${batch.length} of ${due.length} stale prices as ${account}`,
+  );
+  for (const row of batch) {
     try {
-      const outcome = await signer.functionCall({
+      const outcome = await signer.callFunctionRaw({
         contractId: contract,
-        methodName: "refresh_mark",
-        args: { symbol: row.symbol },
-        attachedDeposit: FEE,
+        methodName: row.methodName,
+        args: row.args,
+        deposit: FEE,
         gas: GAS,
       });
-      console.log(`[marks-keep] ${row.symbol} ${outcome.transaction.hash}`);
+      console.log(`[marks-keep] ${row.label} ${outcome.transaction.hash}`);
     } catch (caught) {
       console.error(
-        `[marks-keep] ${row.symbol} failed:`,
+        `[marks-keep] ${row.label} failed:`,
         caught instanceof Error ? caught.message : caught,
       );
     }
   }
-  return 60_000;
+  return due.length > batch.length ? 60_000 : LEAD_SEC * 1000;
+}
+
+function affordable(balance: bigint, contractPayer: boolean) {
+  const floor = contractPayer ? CONTRACT_FLOOR : AGENT_FLOOR;
+  if (balance <= floor + CUSHION) return 0;
+  return Number((balance - floor - CUSHION) / FEE);
 }
 
 async function nearAccount(account: string, secret: string) {
@@ -122,24 +138,41 @@ async function nearAccount(account: string, secret: string) {
   );
 }
 
-async function markets(contract: string) {
+async function prices(contract: string) {
+  const now = Date.now() * 1_000_000;
+  const listed = await view<Market[]>(contract, "get_markets");
+  const shares = await view<Share[]>(contract, "get_shares");
+  const rows: Job[] = [
+    ...listed.map((market) => ({
+      label: market.symbol,
+      methodName: "refresh_mark" as const,
+      args: { symbol: market.symbol },
+      ageSec: ageOf(now, market.mark_updated_ns),
+    })),
+    ...shares.map((share) => ({
+      label: share.asset_id,
+      methodName: "refresh_share" as const,
+      args: { asset_id: share.asset_id },
+      ageSec: ageOf(now, share.updated_ns),
+    })),
+  ];
+  return rows.sort((left, right) => right.ageSec - left.ageSec);
+}
+
+function ageOf(now: number, stamp: string | number) {
+  return Math.max(0, Math.round((now - Number(stamp)) / 1_000_000_000));
+}
+
+async function view<T>(account: string, method: string): Promise<T> {
   const result = await rpcQuery({
     request_type: "call_function",
     finality: "final",
-    account_id: contract,
-    method_name: "get_markets",
+    account_id: account,
+    method_name: method,
     args_base64: Buffer.from("{}").toString("base64"),
   });
   const bytes = (result as { result?: number[] }).result ?? [];
-  const listed = JSON.parse(Buffer.from(bytes).toString()) as Market[];
-  const now = Date.now() * 1_000_000;
-  return listed.map((market) => ({
-    symbol: market.symbol,
-    ageSec: Math.max(
-      0,
-      Math.round((now - Number(market.mark_updated_ns)) / 1_000_000_000),
-    ),
-  }));
+  return JSON.parse(Buffer.from(bytes).toString()) as T;
 }
 
 async function yocto(account: string) {

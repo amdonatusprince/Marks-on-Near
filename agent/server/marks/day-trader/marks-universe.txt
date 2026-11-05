@@ -1,0 +1,12 @@
+AAPL|Apple
+AMZN|Amazon
+MSFT|Microsoft
+NVDA|Nvidia
+TSLA|Tesla
+GC=F|Gold
+CL=F|Crude oil
+BTC-USD|Bitcoin
+ETH-USD|Ether
+BNB-USD|BNB
+SOL-USD|Solana
+NEAR-USD|NEAR
