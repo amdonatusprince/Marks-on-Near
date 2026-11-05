@@ -5,7 +5,7 @@
 #   ./scripts/call.sh view get_market '{"symbol":"NEAR-PERP"}'
 #   ./scripts/call.sh view get_l2 '{"symbol":"NEAR-PERP","depth":5}'
 #
-# Change. The signer defaults to CONTRACT_ID from scripts/testnet.env:
+# Change. The signer defaults to CONTRACT_ID from .env:
 #   ./scripts/call.sh call refresh_mark '{"symbol":"NEAR-PERP"}'
 #
 # The third argument may be a JSON object or a path to a .json file.

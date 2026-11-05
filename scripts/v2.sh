@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Stand up Marks v2 on new accounts, end to end, then point the web app at it.
+# Stand up Marks v2 on new accounts, end to end, then point the app at it.
 #   ./scripts/v2.sh
 #   ./scripts/v2.sh --from-deploy | --from-feed | --from-list | --from-seed | --from-exercise
 

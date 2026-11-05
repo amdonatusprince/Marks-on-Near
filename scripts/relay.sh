@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Submit a gift claim or a faucet claim for someone else. AGENT_ID signs and
-# pays the gas; its key stays in the keychain. The web relayer routes call this.
+# pays the gas; its key stays in the keychain. The app's relayer routes call this.
 #   ./scripts/relay.sh gift-claim <args.json>
 #   ./scripts/relay.sh faucet <args.json>
 

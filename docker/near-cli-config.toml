@@ -1,0 +1,28 @@
+version = "5"
+credentials_home_dir = "/root/.near-credentials"
+
+[network_connection.testnet]
+network_name = "testnet"
+rpc_url = "https://archival-rpc.testnet.fastnear.com/"
+wallet_url = "https://testnet.mynearwallet.com/"
+explorer_transaction_url = "https://explorer.testnet.near.org/transactions/"
+linkdrop_account_id = "testnet"
+near_social_db_contract_account_id = "v1.social08.testnet"
+faucet_url = "https://helper.nearprotocol.com/account"
+fastnear_url = "https://test.api.fastnear.com/"
+staking_pools_factory_account_id = "pool.f863973.m0"
+mpc_contract_account_id = "v1.signer-prod.testnet"
+nearblocks_url = "https://api-testnet.nearblocks.io/"
+
+[network_connection.testnet-fastnear]
+network_name = "testnet"
+rpc_url = "https://test.rpc.fastnear.com/"
+wallet_url = "https://testnet.mynearwallet.com/"
+explorer_transaction_url = "https://explorer.testnet.near.org/transactions/"
+linkdrop_account_id = "testnet"
+near_social_db_contract_account_id = "v1.social08.testnet"
+faucet_url = "https://helper.nearprotocol.com/account"
+fastnear_url = "https://test.api.fastnear.com/"
+staking_pools_factory_account_id = "pool.f863973.m0"
+mpc_contract_account_id = "v1.signer-prod.testnet"
+nearblocks_url = "https://api-testnet.nearblocks.io/"
