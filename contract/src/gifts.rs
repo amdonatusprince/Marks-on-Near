@@ -134,6 +134,25 @@ impl Marks {
         }
     }
 
+    fn reclaim_gift(&mut self, gift_id: u64, after_expiry: bool) {
+        let gift = self.open_gift(gift_id);
+        if env::predecessor_account_id() != gift.sender {
+            env::panic_str("sender only");
+        }
+        if after_expiry && env::block_timestamp() < gift.expiry_ns {
+            env::panic_str("gift not expired");
+        }
+        let sender = gift.sender.clone();
+        self.deliver(&gift, &sender);
+        let stored = self.gifts.gifts.get_mut(&gift_id).unwrap();
+        stored.status = GiftStatus::Refunded;
+        stored.closed_ns = env::block_timestamp();
+        emit(
+            "gift_refunded",
+            json!({ "gift_id": gift_id, "sender": sender }),
+        );
+    }
+
     fn open_gift(&self, gift_id: u64) -> Gift {
         let gift = self
             .gifts
@@ -266,24 +285,14 @@ impl Marks {
         );
     }
 
+    /// The sender voids an open gift. The link stops working and the asset comes back. The fee stays paid.
+    pub fn cancel_gift(&mut self, gift_id: u64) {
+        self.reclaim_gift(gift_id, false);
+    }
+
     /// After expiry the sender takes an unclaimed gift back. The fee stays paid.
     pub fn refund_gift(&mut self, gift_id: u64) {
-        let gift = self.open_gift(gift_id);
-        if env::predecessor_account_id() != gift.sender {
-            env::panic_str("sender only");
-        }
-        if env::block_timestamp() < gift.expiry_ns {
-            env::panic_str("gift not expired");
-        }
-        let sender = gift.sender.clone();
-        self.deliver(&gift, &sender);
-        let stored = self.gifts.gifts.get_mut(&gift_id).unwrap();
-        stored.status = GiftStatus::Refunded;
-        stored.closed_ns = env::block_timestamp();
-        emit(
-            "gift_refunded",
-            json!({ "gift_id": gift_id, "sender": sender }),
-        );
+        self.reclaim_gift(gift_id, true);
     }
 
     pub fn get_gift(&self, gift_id: u64) -> Option<Gift> {
