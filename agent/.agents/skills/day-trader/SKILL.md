@@ -5,7 +5,7 @@ description: >-
   entry and exit, replay odds, size and risk-check, then a Marks ticket.
   Use when they say scan, setups, opening range, breakout, time the
   entry, stop and target, odds, size this trade, risk check, or day trade.
-scope: agent
+scope: runtime
 ---
 
 # Day trader on Marks
