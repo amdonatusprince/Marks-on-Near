@@ -250,7 +250,7 @@ The v2 scripts sign through near-cli's `testnet-fastnear` connection. Set `NEAR_
 | `scripts/v2-accounts.sh` | Creates the token, oracle, contract and six trader accounts. Writes them into `.env` under the same `VITE_*` names the app uses                                               |
 | `scripts/v2-deploy.sh`   | Builds the three crates and calls `new` on any account that has no code yet                                                                                                   |
 | `scripts/v2-feed.sh`     | Fetches public prices and stores them on the oracle                                                                                                                           |
-| `scripts/v2-keep.sh`     | Restamp every market before the one-hour window. The app server starts `--loop` on boot. Each market costs 0.02 NEAR                                                          |
+| `scripts/v2-keep.sh`     | Restamp stale markets and shares every 30 minutes. The app server starts `--loop` on boot. Each refresh costs 0.02 NEAR                                                       |
 | `scripts/v2-list.sh`     | Lists 12 perps, 7 shares and 14 call series, then funds the pool and the desk from the treasury                                                                               |
 | `scripts/v2-seed.sh`     | 10 to 30 random fills per perp, 5 to 8 resting levels per side, and a quoted book on every series. Three workers sign with disjoint traders. `--options` seeds only the calls |
 | `scripts/v2-exercise.sh` | Runs each flow once live: faucet, shares, both loans, a USDC gift, a position gift, a call                                                                                    |
@@ -317,7 +317,7 @@ cd agent && pnpm install && pnpm dev   # http://localhost:3000
 
 The faucet and gift claims go through `/api/faucet` and `/api/gift/claim`, which run `scripts/relay.sh`, so a Google user claims both without gas. A wallet user signs the transaction in the wallet. Nightly would then broadcast it through its own node list, which rejects `send_tx` and retries until the transaction expires, so Marks broadcasts the signed transaction on FastNEAR instead. Candles are `/api/candles`. NEAR Auth fund and sign are `/api/near-auth`. The claim secret stays in the link. The browser that sent the gift keeps a copy, and after that wallet signs once, the same account can copy the link from another browser.
 
-The app reads testnet through FastNEAR's RPC. Set `VITE_TESTNET_RPC` in `.env` to use another. The pages and the agent's chain reads use the same `VITE_CONTRACT_ID`, `VITE_TOKEN_ID` and `VITE_ORACLE_ID`. The server starts `./scripts/v2-keep.sh --loop` on boot so marks stay inside the one-hour window. On a machine without the near-cli keychain it signs as `AGENT_ID` with `MARKS_KEEPER_KEY`. Set `MARKS_KEEPER_ACCOUNT` only when the keeper is a different account.
+The app reads testnet through FastNEAR's RPC. Set `VITE_TESTNET_RPC` in `.env` to use another. The pages and the agent's chain reads use the same `VITE_CONTRACT_ID`, `VITE_TOKEN_ID` and `VITE_ORACLE_ID`. The server starts `./scripts/v2-keep.sh --loop` on boot so marks and shares stay inside the one-hour window. On a machine without the near-cli keychain it signs as `AGENT_ID` with `MARKS_KEEPER_KEY`. Set `MARKS_KEEPER_ACCOUNT` only when the keeper is a different account. `MARKS_KEEP_LEAD` is the age in seconds before a refresh, 1800 by default.
 
 ## Deploy
 
