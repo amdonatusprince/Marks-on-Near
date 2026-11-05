@@ -31,6 +31,12 @@ export type Trader = {
   open_bid_lots: number;
   open_ask_lots: number;
   liquidation_quote_per_lot?: string | null;
+  entry_quote_per_lot?: string;
+  equity?: string;
+  unrealized_pnl?: string;
+  debt?: string;
+  borrow_limit?: string;
+  gift_id?: number | null;
 };
 
 export function contractId(network: Network = "testnet") {
