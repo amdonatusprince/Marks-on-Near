@@ -3,9 +3,12 @@ import type { PlanMarket, PlanTrader } from "../app/marks/lib/order-plan";
 
 // The pages read the same variables through import.meta.env.
 export const MARKS_CONTRACT =
+  // guard:allow-env-credential — public deployment contract id, not a user's credential
   process.env.VITE_CONTRACT_ID || "marks2-6e889d.testnet";
+// guard:allow-env-credential — public deployment token id, not a user's credential
 export const MARKS_TOKEN = process.env.VITE_TOKEN_ID || "musdc-6e889d.testnet";
 export const MARKS_RPC =
+  // guard:allow-env-credential — public deployment RPC URL, not a user's credential
   process.env.VITE_TESTNET_RPC || "https://test.rpc.fastnear.com";
 
 export type ChainMarket = PlanMarket & {

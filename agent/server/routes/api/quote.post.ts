@@ -8,6 +8,7 @@ async function post(request: Request) {
   };
   const dry = incoming.dry !== false;
   const recipient =
+    // guard:allow-env-credential — public deployment recipient, not a user's credential
     incoming.recipient || process.env.VITE_INTENTS_RECIPIENT || "marks.near";
   const response = await fetch("https://1click.chaindefuser.com/v0/quote", {
     method: "POST",
