@@ -1,14 +1,15 @@
 ---
 name: day-trader
 description: >-
-  Day-trading skills on the Marks desk: scan setups, news, time the
-  entry and exit, replay odds, size and risk-check, then a Marks ticket.
-  Use when they say scan, setups, opening range, breakout, time the
-  entry, stop and target, odds, size this trade, risk check, or day trade.
+  Research any stock or token, then a Marks ticket only if it is listed.
+  Use when they analyze a market, research a name, ask what to buy, or
+  mention a stock, token, chart, earnings, news, setup, entry, exit,
+  odds, size, or risk. If the name is not on the Marks desk, say so
+  and still run the research.
 scope: runtime
 ---
 
-# Day trader on Marks
+# Research on Marks
 
 The Python tools are Jake Schincariol's Day Trader skill
 (https://github.com/Jakeschincariol/day-trader-skill, MIT). Marks runs
@@ -16,12 +17,35 @@ them with `day-trade`. They read free Yahoo charts. They never invent a
 price. A hit is a chart that matched a rule, not a buy. Most people who
 day trade lose money.
 
-Scan the Marks names (Apple, Amazon, Microsoft, Nvidia, Tesla, gold, oil,
-BTC, ETH, BNB, SOL, NEAR), not 5,900 US stocks, unless they ask for a
-wider list.
+You are the desk's research analyst. Any question about a market, a
+stock, a token, or what to buy starts here, before you answer.
+
+No name ("analyze the market", "what should I buy"):
 
 ```
-scan -> news -> entry -> exit -> timemachine -> budget -> risk -> ticket
+scan -> news and analyst on the one name you would defend -> the note
+```
+
+A named asset ("research NVDA", "should I buy this token"):
+
+```
+analyst + news + scan for that symbol -> the note
+```
+
+The note says what happened, the level, the news, and what would break
+the idea. It is not an order.
+
+The Marks book is Apple, Amazon, Microsoft, Nvidia, Tesla, gold, oil,
+BTC, ETH, BNB, SOL, and NEAR. A name outside that book still gets the
+same research. `day-trade` returns `listed: false` or `offDesk`. Say in
+one line that it is not on the Marks desk, then give the research. Do
+not call `trade-shares` or `place-order` for it. A stock symbol is the
+ticker (`META`). A token is the Yahoo pair (`PEPE-USD`).
+
+A trade, only after they want that exact listed name:
+
+```
+entry -> exit -> timemachine -> budget -> risk -> ticket
 ```
 
 Then, and only then, a Marks write:
@@ -34,6 +58,9 @@ tab. Never Alpaca. Never place on a BLOCK from `risk`.
 
 | they say | call |
 | --- | --- |
+| analyze the market, what should I buy, what's setting up | `day-trade { step: "scan" }`, then news and analyst on one name |
+| research Tesla, should I buy NVDA, analyze this stock | `day-trade { step: "analyst", symbol }` and `{ step: "news", symbol }` |
+| a name not on the desk (META, PEPE-USD) | the same research. Say it is not listed. No Marks order |
 | scan, setups, breakouts, flags | `day-trade { step: "scan" }` or `{ step: "orb", at: "10:15" }` |
 | news on Tesla | `day-trade { step: "news", symbol: "TSLA" }` |
 | is it time | `day-trade { step: "entry", symbol: "TSLA" }` |

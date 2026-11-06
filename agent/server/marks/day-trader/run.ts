@@ -207,6 +207,25 @@ export async function runTool(
   });
 }
 
+export type DeskFact = {
+  yahoo: string;
+  name: string;
+  share: string | null;
+  market: string | null;
+  listed: boolean;
+};
+
+export function deskFacts(raw: string): DeskFact {
+  const desk = resolveDesk(raw);
+  return {
+    yahoo: desk.yahoo,
+    name: desk.name,
+    share: desk.share ?? null,
+    market: desk.market ?? null,
+    listed: Boolean(desk.share || desk.market),
+  };
+}
+
 export function marksSymbols(list?: string) {
   if (!list?.trim()) return MARKS_SYMBOLS.join(",");
   return list
