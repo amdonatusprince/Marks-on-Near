@@ -9,7 +9,12 @@ import {
   settleSeries,
 } from "@/marks/lib/desk-writes";
 import { useNear } from "@/marks/lib/near";
-import { useAction, useClock, useWallet } from "@/marks/lib/use-v2";
+import {
+  useAction,
+  useClock,
+  useOnTraded,
+  useWallet,
+} from "@/marks/lib/use-v2";
 import {
   UNIT,
   dollarsShort,
@@ -29,7 +34,7 @@ import {
 } from "@/marks/lib/v2";
 import Link from "@/marks/components/link";
 import { useRouter } from "@/marks/lib/navigation";
-import { useEffect, useId, useMemo, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useState } from "react";
 
 type Mode = "buy" | "sell" | "calls";
 
@@ -460,6 +465,8 @@ function CallTicket({
   const [lots, setLots] = useState("1");
   const [book, setBook] = useState<OptionBook | null>(null);
   const [position, setPosition] = useState<OptionPosition | null>(null);
+  const [live, setLive] = useState(0);
+  useOnTraded(useCallback(() => setLive((value) => value + 1), []));
   const { busy, hash, error, pulse, run, setError } = useAction();
   const premiumId = useId();
   const lotsId = useId();
@@ -483,7 +490,7 @@ function CallTicket({
     return () => {
       cancelled = true;
     };
-  }, [account, network, series.id, hash]);
+  }, [account, network, series.id, hash, live]);
 
   const strike = BigInt(series.strike);
   const width = BigInt(series.cap) - strike;

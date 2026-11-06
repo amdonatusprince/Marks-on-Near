@@ -2,7 +2,7 @@ import { BalanceStrip, Stat } from "@/marks/components/v2-ui";
 import { grouped, money } from "@/marks/lib/format";
 import { useNear } from "@/marks/lib/near";
 import type { Market, Trader } from "@/marks/lib/rpc";
-import { useWallet } from "@/marks/lib/use-v2";
+import { useWallet, useOnTraded } from "@/marks/lib/use-v2";
 import {
   seriesTitle,
   shareTicker,
@@ -15,7 +15,7 @@ import {
   type Share,
 } from "@/marks/lib/v2";
 import Link from "@/marks/components/link";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 
 const ZERO = BigInt(0);
 
@@ -38,6 +38,8 @@ export function PortfolioDesk({
   const { account, network, openDialog } = useNear();
   const { wallet, loading } = useWallet();
   const [book, setBook] = useState<Book | null>(null);
+  const [tick, setTick] = useState(0);
+  useOnTraded(useCallback(() => setTick((value) => value + 1), []));
 
   useEffect(() => {
     if (!account) {
@@ -93,7 +95,7 @@ export function PortfolioDesk({
     return () => {
       cancelled = true;
     };
-  }, [account, network, markets, series]);
+  }, [account, network, markets, series, tick]);
 
   if (!account) {
     return (

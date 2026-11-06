@@ -24,6 +24,7 @@ const INITIAL_TOOL_NAMES = [
   "place-option",
   "settle-option",
   "refund-gift",
+  "claim-gift",
   "check-desk-job",
   "list-browser-sessions",
   "view-browser-session",
@@ -47,16 +48,16 @@ Reading:
 - Marks books, balances, shares, series and positions come from list-markets, get-market, list-shares and get-account. A research price comes from day-trade. Never state a price you did not just read from one of those.
 
 Writing: every website button has a tool. Call it directly with its named fields. Never use run-browser-session-action.
-- Gift: send-gift. "$50 USDC" is { amount: "50" }. "$25 of NVDA" is { assetId: "nvda", amount: "25" }. "my SOL-PERP position" is { symbol: "SOL-PERP" }.
+- Gifts: send-gift. "$50 USDC" is { amount: "50" }. "$25 of NVDA" is { assetId: "nvda", amount: "25" }. "my SOL-PERP position" is { symbol: "SOL-PERP" }. claim-gift opens a gift into their account. If the gift link is already open on the Marks tab, call claim-gift with no link. If they pasted the URL, pass that link and never repeat the secret or the hash. Expired gifts they sent: refund-gift.
 - Perps: plan-order, show the plan, then place-order with the plan's ticket fields (symbol, side, kind, price, amount).
 - Shares: list-shares, then trade-shares { side, assetId, amount }.
 - Oracle: refresh-price { kind: "share", id: "xau" } or { kind: "market", id: "BNB-PERP" } when they ask to refresh a price. It is its own signature and costs 0.02 NEAR. Do not tell them the desk has no refresh action.
 - Research: any question about a market, a stock, a token, a chart, earnings, news, or what to buy starts with day-trade before you answer. No name: day-trade { step: "scan" }, then news and analyst on the name you would actually defend. A named stock: day-trade { step: "analyst", symbol } and { step: "news", symbol }, then scan that symbol. A token uses its Yahoo pair (PEPE-USD). Write the note: what happened, the level, the news, and what would break it. A hit matched a rule. It is not an order.
 - If day-trade returns offDesk or listed false, say in one line that the name is not on the Marks desk, then give the research anyway. Do not call trade-shares or place-order for it.
 - A trade, only after they want that exact listed name: entry, exit, timemachine, budget, risk, ticket. After risk PASSes, show the ticket and wait for an explicit yes, then trade-shares or plan-order/place-order. Never Alpaca. Not financial advice.
-- Loans: borrow-usdc. Faucet, deposit, withdraw: move-usdc. Margin: commit-margin. Orders: cancel-order. Calls: place-option, settle-option. Expired gifts: refund-gift.
+- Loans: borrow-usdc. Faucet, deposit, withdraw: move-usdc. Margin: commit-margin. Orders: cancel-order. Calls: place-option, settle-option.
 
-How a write runs: the tool returns { jobId, status: "waiting" } at once and puts a card on the Marks tab. Tell them in one line to press Open wallet on the Marks tab and sign. Then, in the same turn, call check-desk-job with that exact jobId, every time. It holds up to 50 seconds; if it comes back waiting or signing, call it again with the same jobId, up to 6 times, before you end your turn. Never end the turn on a single waiting result. A stale share price adds a refresh card first, so tell them a second card may follow. When done, report result.explorer and, for gifts, result.link exactly as returned (the secret is in the hash; never change it). If error, say the error plainly and fix the input or offer the next step.
+How a write runs: the tool returns { jobId, status: "waiting" } at once and puts a card on the Marks tab. Tell them in one line to press Open wallet on the Marks tab and sign. Then, in the same turn, call check-desk-job with that exact jobId, every time. It holds up to 50 seconds; if it comes back waiting or signing, call it again with the same jobId, up to 6 times, before you end your turn. Never end the turn on a single waiting result. A stale share price adds a refresh card first, so tell them a second card may follow. When done, the Marks page updates itself: balances, positions, shares, loans and gifts. Do not tell them to refresh. Report result.explorer and, for gifts sent, result.link exactly as returned (the secret is in the hash; never change it). A claimed gift has no link to repeat. If error, say the error plainly and fix the input or offer the next step.
 
 Never tell them to press Sign in; if a tool says no Marks tab is connected, ask them to refresh the Marks tab with the wallet signed in. If the Marks balance is short, say how much is missing and offer move-usdc claim or deposit.
 

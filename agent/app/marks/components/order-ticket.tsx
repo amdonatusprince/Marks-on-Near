@@ -15,6 +15,7 @@ import {
 import { contractSize } from "@/marks/lib/markets";
 import { useNear } from "@/marks/lib/near";
 import type { OrderKind } from "@/marks/lib/order-plan";
+import { notifyTraded } from "@/marks/lib/desk-live";
 import { placeOrder } from "@/marks/lib/place-order";
 import { explorerTx } from "@/marks/lib/v2";
 import { useEffect, useId, useRef, useState } from "react";
@@ -182,7 +183,7 @@ export function OrderTicket({
               ),
           })
             .then(({ tx }) => {
-              window.dispatchEvent(new Event("marks-traded"));
+              notifyTraded();
               if (tx) {
                 toast.success("Order placed.", {
                   href: explorerTx(tx),
