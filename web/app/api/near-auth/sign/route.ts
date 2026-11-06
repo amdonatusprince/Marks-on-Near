@@ -1,4 +1,5 @@
 import { agentId, redact, runScript } from "@/lib/auth-script";
+import { rpcUrl } from "@/lib/network";
 import { mkdtemp, rm, writeFile } from "fs/promises";
 import os from "os";
 import path from "path";
@@ -68,7 +69,7 @@ export async function POST(request: Request) {
 }
 
 async function signatureOf(hash: string, sender: string) {
-  const response = await fetch("https://rpc.testnet.near.org", {
+  const response = await fetch(rpcUrl("testnet"), {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
