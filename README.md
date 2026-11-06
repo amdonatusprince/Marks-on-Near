@@ -2,9 +2,49 @@
 
 **Trade perps and stocks on NEAR, borrow against what you hold, and give any of it away as a link.**
 
-Marks is one NEAR contract that holds a USDC balance per account and runs four things on it: twelve perpetual order books, a desk that sells tokenized shares at the oracle price, capped call options with a fully paid worst case, and a lending pool that lends against perp positions and shares for a 1 percent fee. Any share, any USDC amount, or a whole open perp position can be sent to a friend as a link. The friend signs in with Google and owns it. They need no wallet, no seed phrase and no gas.
+**[Live demo](https://marks.leash.market)** · **[NEAR testnet contract](https://testnet.nearblocks.io/address/marks2-6e889d.testnet)** · **[Transactions](#transactions)** · **[Run locally](#quick-start)**
 
-Everything below runs on NEAR testnet with a mock USDC that anyone can claim from a faucet.
+Trading across perpetuals, tokenized stocks, lending and payments is fragmented across separate apps, while most AI market tools stop at advice and cannot safely execute an on-chain action. Marks puts those workflows on one desk and makes the person's wallet the final approval boundary.
+
+Marks is an agent-native trading terminal on NEAR. Its agent researches any stock or token, analyzes markets, manages the person's portfolio and prepares trades. One NEAR contract holds a USDC balance per account and runs twelve perpetual order books, a desk that sells tokenized shares at the oracle price, capped calls with a fully paid worst case, and loans against perp positions or shares. Any share, USDC amount or whole open perp position can become a claim link.
+
+NEAR is the settlement and account layer: contracts hold balances and positions, every state change is verifiable on testnet, transactions are fast and inexpensive, and the user approves agent-prepared writes with their own wallet. Gift recipients can use Google-backed NEAR accounts, while the claim relayer pays gas without gaining custody. Everything in the demo uses mock USDC on NEAR testnet.
+
+## Quick start
+
+Requirements: Node.js 22, pnpm 10.29.1, Rust stable with `rustfmt`, and Docker only if you want the production image. The live demo is the fastest way to test Marks; local development uses the same deployed testnet contracts.
+
+```sh
+git clone https://github.com/amdonatusprince/Marks-on-Near.git
+cd Marks-on-Near
+cp .env.example .env
+ln -sfn ../.env agent/.env
+
+npm ci
+cd agent
+corepack enable
+corepack prepare pnpm@10.29.1 --activate
+pnpm install --frozen-lockfile
+MARKS_KEEPER=off pnpm dev
+```
+
+Open the URL printed by the command (`http://localhost:3000` when that port is free). The desk is public. Connect a testnet wallet to write, then press **Agent** and connect a model to use chat. Claim mock USDC from `/faucet`; no real funds are used. The local command disables the paid oracle keeper; production already keeps the shared testnet prices fresh.
+
+For a fast, non-interactive verification:
+
+```sh
+npm run format:check
+cd agent && pnpm typecheck && pnpm agent-native:doctor
+cd ..
+cargo test --manifest-path contract/Cargo.toml   # 75 tests
+cargo test --manifest-path token/Cargo.toml      # 7 tests
+cargo test --manifest-path oracle/Cargo.toml     # 4 tests
+docker build --platform linux/amd64 -t marks .
+```
+
+The CI workflow runs Prettier, the app typecheck, Rust formatting and all 86 Rust tests on every push and pull request.
+
+## Architecture
 
 ```mermaid
 flowchart LR
@@ -229,11 +269,11 @@ Deploy, funding, and one live pass of every flow. The seed is a few hundred more
 ## Run it
 
 ```sh
-cargo test --manifest-path contract/Cargo.toml   # 73 tests
+cargo test --manifest-path contract/Cargo.toml   # 75 tests
 cargo test --manifest-path token/Cargo.toml
 cargo test --manifest-path oracle/Cargo.toml
 npm run format:check
-cd agent && pnpm typecheck
+cd agent && pnpm typecheck && pnpm agent-native:doctor
 ```
 
 Stand up v2 on new accounts, or resume a stage:
@@ -296,10 +336,7 @@ Two sign-ins, on purpose:
 1. **NEAR wallet** (Google via [NEAR Auth](https://docs.auth.near.org/), a passkey, or NEAR Connect: NEAR, EVM, Solana, Stellar, TON, Tron) so the contract can see an account. Google gets 0.05 NEAR for gas on first sign-in. This is what Place order, Send a gift and the agent's client actions use.
 2. **Agent-Native session** so the Agent panel can open. Press **Agent** signed out and you land on that sign-in, then back on the same Marks page. Connect a model with **Use Builder.io** or a custom key.
 
-```sh
-./scripts/v2-web-env.sh
-cd agent && pnpm install && pnpm dev   # http://localhost:3000
-```
+See [Quick start](#quick-start) for a fresh checkout. Existing maintainers can run `./scripts/v2-web-env.sh`, then `cd agent && pnpm dev`.
 
 | Path               | What it does                                                                                                                                                                                                             |
 | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -321,13 +358,13 @@ The app reads testnet through FastNEAR's RPC. Set `VITE_TESTNET_RPC` in `.env` t
 
 ## Deploy
 
-The production host is a Google Cloud `e2-micro` in `us-west1`, `us-central1`, or `us-east1`, with a 30 GB standard persistent disk. That shape stays inside the free tier. The container is one long-lived process. Publishing it does not move the contracts. A public URL is still this testnet desk. Intents stays a dry quote.
+The production host is a Google Cloud `e2-micro` in `us-central1-a`, with a 30 GB standard persistent disk. The container is one long-lived process behind Caddy at [marks.leash.market](https://marks.leash.market). Publishing it does not move the contracts. Intents stays a dry quote.
 
 Build the image on this Mac. The VM has 1 GB of RAM, which can run the server and cannot build the image.
 
 ```sh
-docker build -t marks .
-docker save marks | gzip > marks.tar.gz
+docker build --platform linux/amd64 -t marks:latest .
+docker save marks:latest | gzip > marks.tar.gz
 ```
 
 Copy `marks.tar.gz` and `.env` to the VM. On the VM, install Docker, add 1 GB of swap, load the image, and start it. `.env` is the only thing you add. Leave `DATABASE_URL` empty.
@@ -336,31 +373,31 @@ Copy `marks.tar.gz` and `.env` to the VM. On the VM, install Docker, add 1 GB of
 sudo fallocate -l 1G /swapfile && sudo chmod 600 /swapfile && sudo mkswap /swapfile && sudo swapon /swapfile
 gunzip -c marks.tar.gz | sudo docker load
 sudo docker run -d --name marks --restart unless-stopped \
-  -p 80:3000 \
+  -p 127.0.0.1:3000:3000 \
   -v marks-data:/marks/agent/data \
-  --env-file .env \
-  marks
+  --env-file /home/donatusprince/.env \
+  marks:latest
 ```
 
-On start the container reads `MARKS_KEEPER_KEY` and gives that key to `near-cli`, so the faucet, gift claims, and Google sign-in sign as `AGENT_ID`. The keeper uses the same key. Agent sign-in, chats, and gift links stay in the `marks-data` volume. Open TCP port 80 on the VM. The boot disk has to be a standard persistent disk. A balanced or SSD disk is billed, and outbound traffic past 1 GB in a month is billed.
+On start the container reads `MARKS_KEEPER_KEY` and gives that key to `near-cli`, so the faucet, gift claims, and Google sign-in sign as `AGENT_ID`. The keeper uses the same key. Agent sign-in, chats, and gift links stay in the `marks-data` volume. Caddy owns public ports 80 and 443 and proxies to `127.0.0.1:3000`. The boot disk has to be a standard persistent disk. A balanced or SSD disk is billed, and outbound traffic past 1 GB in a month is billed.
 
 `BETTER_AUTH_SECRET` is already in `.env`. A new value signs every agent session out. Wallet sign-in, gifts, and trades do not use it.
 
 ## The agent
 
-Press **Agent** in the nav and the agent opens in a panel beside every page. It is a personal finance and on-chain analyst for this account: it reads the same chain the pages read, then runs the same wallet calls the pages run. What you can do on `/markets`, `/stocks`, `/borrow`, `/send` and `/faucet`, you can ask for in chat. Before anything is signed, Marks shows an approval card in the tab. Then your own wallet signs. The agent never holds a key.
+Press **Agent** in the nav and the agent opens in a panel beside every page. It researches any stock or token through Yahoo-backed tools, says when a name is not listed on Marks, and reads the same chain as the pages before managing this account. What you can do on `/markets`, `/stocks`, `/borrow`, `/send`, `/faucet` and a gift claim page, you can ask for in chat. Before anything is signed, Marks shows an approval card in the tab. Then your own wallet signs. The agent never holds a wallet key.
 
 Reads go through server actions (`agent/actions/`, FastNEAR RPC). Writes are typed server actions too, and each one runs the client action of the same name on your Marks tab (`agent/app/marks/lib/desk-actions.ts`), which calls the same function as the page button (`agent/app/marks/lib/desk-writes.ts`). `send-gift` calls `agent/app/marks/lib/create-gift.ts`, the same `create_gift` path as `/send`. The returned link keeps the secret after the `#`. `plan-order` imports `agent/app/marks/lib/order-plan.ts`, the same math as the ticket.
 
-A write puts an approval card in the tab. Press **Open wallet** and sign. The agent waits with `check-desk-job` and replies with the transaction link once the wallet returns. Before a card appears, the server checks the contract's rules, so the agent tells you up front when a gift is already closed or when a loan is over the limit. For a share loan it locks the fewest shares that keep debt plus the 1% fee within 50% of their value. `get-account` lists each resting order's id, so "cancel my order" works without looking it up.
+A write puts an approval card in the tab. Press **Open wallet** and sign. The agent waits with `check-desk-job` and replies with the transaction link once the wallet returns. Balances, positions, shares, loans and gifts re-read automatically after the write lands. Before a card appears, the server checks the contract's rules, so the agent tells you up front when a gift is already closed or when a loan is over the limit. For a share loan it locks the fewest shares that keep debt plus the 1% fee within 50% of their value. `get-account` lists each resting order's id, so "cancel my order" works without looking it up.
 
 ```mermaid
 flowchart LR
   person[You] --> desk[Marks desk tab]
   person --> chat[Agent panel]
-  chat --> reads[list-markets, get-market, get-account, list-shares, plan-order]
+  chat --> reads[list-markets, get-market, get-account, list-shares, day-trade, plan-order]
   reads --> rpc[FastNEAR RPC]
-  chat --> writes[place-order, send-gift, refund-gift, trade-shares, borrow-usdc, cancel-order, move-usdc, place-option, settle-option]
+  chat --> writes[place-order, send-gift, claim-gift, refund-gift, trade-shares, borrow-usdc, cancel-order, move-usdc, place-option, settle-option]
   chat --> session[Browser session: Marks desk]
   session --> nav[open-market, fill-ticket]
   writes --> session
@@ -377,6 +414,7 @@ flowchart LR
 | `/stocks`          | Buy, write or settle a call              | `list-shares`, then `place-option` or `settle-option`                                                                                          |
 | `/borrow`          | Borrow or repay against a perp or shares | `borrow-usdc`                                                                                                                                  |
 | `/send`            | Gift USDC, shares or a position          | `send-gift`. The chat returns the claim link. `refund-gift` revokes an open one. The link stops working.                                       |
+| `/g/:id`           | Open the gift in the current link        | `claim-gift`. The secret stays in the URL hash and the recipient account is bound into the claim signature.                                    |
 | `/faucet`          | Claim 1,000 mUSDC, deposit or withdraw   | `move-usdc`                                                                                                                                    |
 | `/portfolio`       | How this account is doing                | `get-account` (balances, positions, shares, gifts sent, no claim secrets)                                                                      |
 
