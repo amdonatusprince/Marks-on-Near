@@ -4,11 +4,14 @@ import {
   ensureGoogleFunded,
   googleClosed,
   googleSend,
+  googleSendActions,
   loginGoogle,
   logoutGoogle,
   restoreGoogleAccount,
 } from "@/lib/google-auth";
-import { NETWORK_COOKIE, type Network } from "@/lib/network";
+import { functionCall } from "near-api-js/lib/transaction";
+import { installNightlyRelay, setNightlyNetwork } from "@/lib/nightly";
+import { NETWORK_COOKIE, rpcUrl, type Network } from "@/lib/network";
 import { contractId } from "@/lib/rpc-client";
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -29,8 +32,24 @@ type NearState = {
   closeDialog: () => void;
   signIn: (choice: Choice) => Promise<void>;
   signOut: () => Promise<void>;
-  send: (methodName: string, args: object) => Promise<string>;
+  send: (methodName: string, args: object, options?: SendOptions) => Promise<string>;
+  sendMany: (calls: ContractCall[]) => Promise<string>;
 };
+
+/** One function call inside a transaction. Gas is in gas units, deposit in yoctoNEAR. */
+export type ContractCall = {
+  methodName: string;
+  args: object;
+  gas?: string;
+  deposit?: string;
+};
+
+/** Receiver defaults to the Marks contract. Gas in gas units, deposit in yoctoNEAR. */
+export type SendOptions = { receiverId?: string; gas?: string; deposit?: string };
+
+export const ONE_YOCTO = "1";
+export const ORACLE_FEE = "20000000000000000000000";
+export const HEAVY_GAS = "300000000000000";
 
 const NearContext = createContext<NearState | null>(null);
 
@@ -69,6 +88,7 @@ function connector(network: Network) {
       const { NearConnector } = await import("@hot-labs/near-connect");
       const next = new NearConnector({
         network,
+        providers: { testnet: [rpcUrl("testnet")], mainnet: [rpcUrl("mainnet")] },
         footerBranding: { heading: "Marks", link: "https://near.com", linkText: "near.com" },
       });
       await next.whenManifestLoaded.catch(() => undefined);
@@ -82,6 +102,18 @@ function connector(network: Network) {
 
 function messageOf(caught: unknown) {
   return caught instanceof Error ? caught.message : "Could not sign in";
+}
+
+function withTimeout<T>(work: Promise<T>, ms: number, message: string) {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(message)), ms);
+  });
+  work.then(
+    () => clearTimeout(timer),
+    () => clearTimeout(timer),
+  );
+  return Promise.race([work, timeout]);
 }
 
 export function NearProvider({
@@ -108,6 +140,8 @@ export function NearProvider({
   };
 
   useEffect(() => {
+    setNightlyNetwork(network);
+    installNightlyRelay();
     let cancelled = false;
     let current: NearConnector | undefined;
     const onIn = (event: { accounts: { accountId: string }[] }) => {
@@ -205,7 +239,44 @@ export function NearProvider({
         await logoutGoogle().catch(() => undefined);
         remember(null, null);
       },
-      send: async (methodName, args) => {
+      send: async (methodName, args, options = {}) => {
+        const id = options.receiverId ?? contractId(network);
+        const gas = options.gas ?? "30000000000000";
+        const deposit = options.deposit ?? "0";
+        if (!id) {
+          throw new Error(
+            network === "mainnet"
+              ? "NEXT_PUBLIC_MAINNET_CONTRACT_ID is not set"
+              : "NEXT_PUBLIC_CONTRACT_ID is not set",
+          );
+        }
+        if (session === "google") {
+          return googleSend(methodName, args, id, BigInt(gas), BigInt(deposit));
+        }
+        installNightlyRelay();
+        const next = await connector(network);
+        let wallet: NearWalletBase;
+        try {
+          wallet = await next.wallet();
+        } catch {
+          throw new Error("Sign in before sending a transaction");
+        }
+        const result = await withTimeout(
+          wallet.signAndSendTransaction({
+            receiverId: id,
+            actions: [
+              {
+                type: "FunctionCall",
+                params: { methodName, args, gas, deposit },
+              },
+            ],
+          }),
+          120_000,
+          "The wallet did not finish sending. Approve the transaction again.",
+        );
+        return result.transaction?.hash ?? "";
+      },
+      sendMany: async (calls) => {
         const id = contractId(network);
         if (!id) {
           throw new Error(
@@ -214,7 +285,21 @@ export function NearProvider({
               : "NEXT_PUBLIC_CONTRACT_ID is not set",
           );
         }
-        if (session === "google") return googleSend(methodName, args, id);
+        if (calls.length === 0) throw new Error("The transaction has no actions");
+        if (session === "google") {
+          return googleSendActions(
+            id,
+            calls.map((call) =>
+              functionCall(
+                call.methodName,
+                call.args,
+                BigInt(call.gas ?? "30000000000000"),
+                BigInt(call.deposit ?? "0"),
+              ),
+            ),
+          );
+        }
+        installNightlyRelay();
         const next = await connector(network);
         let wallet: NearWalletBase;
         try {
@@ -222,20 +307,22 @@ export function NearProvider({
         } catch {
           throw new Error("Sign in before sending a transaction");
         }
-        const result = await wallet.signAndSendTransaction({
-          receiverId: id,
-          actions: [
-            {
-              type: "FunctionCall",
+        const result = await withTimeout(
+          wallet.signAndSendTransaction({
+            receiverId: id,
+            actions: calls.map((call) => ({
+              type: "FunctionCall" as const,
               params: {
-                methodName,
-                args,
-                gas: "30000000000000",
-                deposit: "0",
+                methodName: call.methodName,
+                args: call.args,
+                gas: call.gas ?? "30000000000000",
+                deposit: call.deposit ?? "0",
               },
-            },
-          ],
-        });
+            })),
+          }),
+          120_000,
+          "The wallet did not finish sending. Approve the transaction again.",
+        );
         return result.transaction?.hash ?? "";
       },
     }),
