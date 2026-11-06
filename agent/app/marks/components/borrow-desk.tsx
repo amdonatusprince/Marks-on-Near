@@ -19,7 +19,12 @@ import {
 } from "@/marks/lib/desk-writes";
 import { useNear } from "@/marks/lib/near";
 import type { Market, Trader } from "@/marks/lib/rpc";
-import { useAction, useClock, useWallet } from "@/marks/lib/use-v2";
+import {
+  useAction,
+  useClock,
+  useOnTraded,
+  useWallet,
+} from "@/marks/lib/use-v2";
 import {
   SHARE_LIQUIDATION_BPS,
   SHARE_LTV_BPS,
@@ -37,7 +42,7 @@ import {
 } from "@/marks/lib/v2";
 import Link from "@/marks/components/link";
 import { useRouter } from "@/marks/lib/navigation";
-import { useEffect, useId, useState } from "react";
+import { useCallback, useEffect, useId, useState } from "react";
 
 const ZERO = BigInt(0);
 const BPS = BigInt(10_000);
@@ -129,6 +134,7 @@ function PerpLoans({
   const [held, setHeld] = useState<Held[] | null>(null);
   const [picked, setPicked] = useState(initial ?? "");
   const [tick, setTick] = useState(0);
+  useOnTraded(useCallback(() => setTick((value) => value + 1), []));
 
   useEffect(() => {
     if (!account) return;

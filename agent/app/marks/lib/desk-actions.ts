@@ -6,6 +6,7 @@ import {
   submitGift,
   type SendGiftInput,
 } from "@/marks/lib/create-gift";
+import { notifyTraded } from "@/marks/lib/desk-live";
 import { deskJob, startDeskJob } from "@/marks/lib/desk-jobs";
 import {
   borrowAgainstShares,
@@ -14,6 +15,7 @@ import {
   cancelOrder,
   claimFaucetByRelay,
   claimFaucetSelf,
+  claimGift,
   claimSettlement,
   commitMargin,
   depositToMarks,
@@ -40,12 +42,17 @@ import type { Market } from "@/marks/lib/rpc";
 import { viewClient } from "@/marks/lib/rpc-client";
 import {
   isFresh,
+  shareTicker,
+  units,
   unitsFromText,
   viewMarks,
   explorerTx,
+  type Gift,
+  type GiftAsset,
   type Series,
   type Share,
 } from "@/marks/lib/v2";
+import { claimSignature, openNote, publicKeyOf } from "@/marks/lib/gift-key";
 
 export type Ticket = {
   symbol: string;
@@ -137,6 +144,31 @@ function asTicket(args: unknown): Ticket {
   };
 }
 
+function giftLinkParts(raw?: string) {
+  const source = raw?.trim() || window.location.href;
+  let url: URL;
+  try {
+    url = new URL(source, window.location.origin);
+  } catch {
+    throw new Error("That is not a gift link.");
+  }
+  const match = /\/g\/(\d+)/.exec(url.pathname);
+  const secret = url.hash.replace(/^#/, "").toLowerCase();
+  if (!match || !/^[0-9a-f]{64}$/.test(secret)) {
+    throw new Error(
+      "Open the gift link on this Marks tab. The secret stays in the address bar, after the #.",
+    );
+  }
+  return { giftId: Number(match[1]), secret };
+}
+
+function giftLabel(asset: GiftAsset) {
+  if (asset.kind === "usdc") return money(asset.amount);
+  if (asset.kind === "shares")
+    return `${units(asset.units)} ${shareTicker(asset.asset_id)}`;
+  return asset.symbol;
+}
+
 function needAccount(live: DeskLive) {
   if (!live.account) {
     live.openDialog();
@@ -172,7 +204,7 @@ export function deskActions(
       done,
       tx ? { href: explorer, label: "View the transaction" } : undefined,
     );
-    window.dispatchEvent(new Event("marks-traded"));
+    notifyTraded();
     return { ok: true as const, tx, explorer };
   };
 
@@ -453,7 +485,7 @@ export function deskActions(
             href: explorer,
             label: "View the transaction",
           });
-          window.dispatchEvent(new Event("marks-traded"));
+          notifyTraded();
           return {
             ok: true,
             giftId: result.giftId,
@@ -518,6 +550,63 @@ export function deskActions(
           );
           const tx = await cancelGift(wallet.send, id);
           return signed(tx, "Gift taken back.");
+        });
+      },
+    }),
+    defineClientAction<{ link?: string }, Queued>({
+      name: "claim-gift",
+      title: "Open a gift",
+      description:
+        "Claim an open gift into the signed-in account, same as Open on the gift link. Pass link only when they pasted the full URL. Otherwise the gift link must already be open on this Marks tab, secret in the address bar. Do not repeat the secret.",
+      schema: {
+        type: "object",
+        properties: {
+          link: {
+            type: "string",
+            description:
+              "Full gift URL including the hash, only when they pasted it.",
+          },
+        },
+      },
+      run: ({ link }) => {
+        const wallet = get();
+        const account = needAccount(wallet);
+        return queue("claim-gift", async (signing) => {
+          const { giftId, secret } = giftLinkParts(link);
+          const gift = await viewMarks<Gift | null>(
+            wallet.network,
+            "get_gift",
+            { gift_id: giftId },
+          );
+          if (!gift) throw new Error(`Gift ${giftId} does not exist.`);
+          if (publicKeyOf(secret) !== gift.claim_key)
+            throw new Error("This link does not open that gift.");
+          if (gift.status !== "open")
+            throw new Error(`This gift is already ${gift.status}.`);
+          if (gift.expiry_ns <= Date.now() * 1e6)
+            throw new Error("This gift has expired.");
+          await confirm(
+            {
+              title: "Open this gift?",
+              rows: [
+                { label: "Gift", value: giftLabel(gift.asset) },
+                { label: "From", value: gift.sender },
+                { label: "Into", value: account },
+              ],
+              hint: "Confirm and the gift opens into your account. The link stops working.",
+            },
+            signing,
+          );
+          const contract = contractFor(wallet.network);
+          const signature = claimSignature(contract, secret, gift.id, account);
+          const tx = await claimGift(wallet.send, gift.id, account, signature);
+          const note = await openNote(secret, gift.note).catch(() => "");
+          window.dispatchEvent(
+            new CustomEvent("marks-gift-opened", {
+              detail: { giftId: gift.id, note, hash: tx, recipient: account },
+            }),
+          );
+          return signed(tx, "Gift opened.");
         });
       },
     }),

@@ -2,7 +2,18 @@ import { useNear } from "@/marks/lib/near";
 import type { Network } from "@/marks/lib/network";
 import type { Trader } from "@/marks/lib/rpc";
 import { reason, viewMarks, viewToken, type ShareLoan } from "@/marks/lib/v2";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+
+/** Re-read after an agent write or a page button, including the delayed chain reads. */
+export function useOnTraded(onTraded: () => void) {
+  const saved = useRef(onTraded);
+  saved.current = onTraded;
+  useEffect(() => {
+    const run = () => saved.current();
+    window.addEventListener("marks-traded", run);
+    return () => window.removeEventListener("marks-traded", run);
+  }, []);
+}
 
 let firstSymbol: Promise<string> | null = null;
 
@@ -42,6 +53,7 @@ export function useWallet() {
   const [loading, setLoading] = useState(false);
   const [tick, setTick] = useState(0);
   const refresh = useCallback(() => setTick((value) => value + 1), []);
+  useOnTraded(refresh);
 
   useEffect(() => {
     if (!account) {

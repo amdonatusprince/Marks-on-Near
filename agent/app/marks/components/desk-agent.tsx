@@ -9,6 +9,7 @@ import {
   type AskCard,
   type DeskLive,
 } from "@/marks/lib/desk-actions";
+import { notifyTraded } from "@/marks/lib/desk-live";
 import { useNear } from "@/marks/lib/near";
 import { contractFor } from "@/marks/lib/network";
 
@@ -133,6 +134,7 @@ export function DeskAgent() {
           "send-gift",
           "check-desk-job",
           "refund-gift",
+          "claim-gift",
           "trade-shares",
           "refresh-price",
           "borrow-usdc",
@@ -161,8 +163,13 @@ export function DeskAgent() {
   );
 
   const onRefresh = useCallback(() => {
-    window.dispatchEvent(new Event("marks-traded"));
-    void revalidator.revalidate();
+    notifyTraded();
+  }, []);
+
+  useEffect(() => {
+    const refresh = () => void revalidator.revalidate();
+    window.addEventListener("marks-traded", refresh);
+    return () => window.removeEventListener("marks-traded", refresh);
   }, [revalidator]);
 
   const onRequestApproval = useCallback(() => true, []);

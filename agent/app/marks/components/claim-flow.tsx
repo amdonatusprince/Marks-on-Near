@@ -9,6 +9,7 @@ import {
 } from "@/marks/components/marks/ClaimStage";
 import type { CertificateProps } from "@/marks/components/marks/Certificate";
 import { figures, money } from "@/marks/lib/format";
+import { claimGift } from "@/marks/lib/desk-writes";
 import { claimSignature, openNote, publicKeyOf } from "@/marks/lib/gift-key";
 import { useNear } from "@/marks/lib/near";
 import { contractFor } from "@/marks/lib/network";
@@ -151,6 +152,33 @@ export function ClaimFlow({ giftId }: { giftId: number | null }) {
   }, [giftId, network, contract]);
 
   const gift = "gift" in view ? view.gift : null;
+
+  useEffect(() => {
+    const onOpened = (event: Event) => {
+      const detail = (
+        event as CustomEvent<{
+          giftId: number;
+          note: string;
+          hash: string;
+          recipient: string;
+        }>
+      ).detail;
+      if (!detail || detail.giftId !== giftId) return;
+      setView((current) => {
+        const currentGift = "gift" in current ? current.gift : null;
+        if (!currentGift || currentGift.id !== detail.giftId) return current;
+        return {
+          screen: "opened",
+          gift: currentGift,
+          note: detail.note,
+          hash: detail.hash,
+          recipient: detail.recipient,
+        };
+      });
+    };
+    window.addEventListener("marks-gift-opened", onOpened);
+    return () => window.removeEventListener("marks-gift-opened", onOpened);
+  }, [giftId]);
   const certificate = useMemo<CertificateProps | undefined>(() => {
     if (!gift) return undefined;
     const { asset } = gift;
@@ -183,30 +211,7 @@ export function ClaimFlow({ giftId }: { giftId: number | null }) {
     setView({ screen: "opening", gift });
     const signature = claimSignature(contract, secret, gift.id, account);
     try {
-      let hash = "";
-      const response = await fetch("/api/gift/claim", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          gift_id: gift.id,
-          recipient: account,
-          signature,
-        }),
-      });
-      const body = (await response.json().catch(() => ({}))) as {
-        hash?: string;
-        error?: string;
-      };
-      if (response.ok && body.hash) {
-        hash = body.hash;
-      } else {
-        // With the relayer down, the recipient's own account submits the same signed claim.
-        hash = await send(
-          "claim_gift",
-          { gift_id: gift.id, recipient: account, signature },
-          { gas: "100000000000000" },
-        );
-      }
+      const hash = await claimGift(send, gift.id, account, signature);
       const note = await openNote(secret, gift.note).catch(() => "");
       setView({ screen: "opened", gift, note, hash, recipient: account });
     } catch (caught) {

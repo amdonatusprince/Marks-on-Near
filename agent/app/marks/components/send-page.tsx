@@ -19,7 +19,7 @@ import { publishGiftLinks, pullGiftLinks } from "@/marks/lib/gift-sync";
 import { useNear } from "@/marks/lib/near";
 import { contractFor } from "@/marks/lib/network";
 import type { Market, Trader } from "@/marks/lib/rpc";
-import { useClock, useWallet } from "@/marks/lib/use-v2";
+import { useClock, useOnTraded, useWallet } from "@/marks/lib/use-v2";
 import {
   UNIT,
   fee,
@@ -88,6 +88,7 @@ export function SendPage({
   useNotify(run.phase === "error" ? run.message : "");
   const [positions, setPositions] = useState<Held[]>([]);
   const [listTick, setListTick] = useState(0);
+  useOnTraded(useCallback(() => setListTick((value) => value + 1), []));
   const noteId = useId();
 
   useEffect(() => {

@@ -2,12 +2,40 @@ import { defineAction } from "@agent-native/core/action";
 import { z } from "zod";
 
 import {
+  deskFacts,
   marksSymbols,
   marksTicket,
   resolveDesk,
   runTool,
   writeMarksPortfolio,
 } from "../server/marks/day-trader/run";
+
+function noted<T extends { next?: string; ok?: boolean }>(
+  result: T,
+  asked?: string,
+): T & {
+  desk?: ReturnType<typeof deskFacts> | ReturnType<typeof deskFacts>[];
+  offDesk?: string[];
+} {
+  const names = (asked || "")
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+  if (!names.length) return result;
+  const rows = names.map((name) => deskFacts(name));
+  const off = rows.filter((row) => !row.listed);
+  const aside = off.length
+    ? ` ${off.map((row) => `${row.name} (${row.yahoo})`).join(", ")} is not on the Marks desk. Say that in one line, then give the research. Do not call trade-shares or place-order for it.${result.ok === false ? " If this is a token, retry with the Yahoo pair, such as PEPE-USD." : ""}`
+    : "";
+  const desk = rows.length === 1 ? rows[0] : rows;
+  if (!desk) return result;
+  return {
+    ...result,
+    desk,
+    offDesk: off.map((row) => row.yahoo),
+    next: `${result.next || ""}${aside}`.trim(),
+  };
+}
 
 const Step = z.enum([
   "scan",
@@ -26,7 +54,7 @@ const Step = z.enum([
 
 export default defineAction({
   description:
-    "Day-trader skill on the Marks desk: scan setups, news, time the entry, set stop and target, replay odds, size and risk-check, then a Marks ticket. Yahoo charts, never invents a price. A fill still needs place-order or trade-shares and the person's wallet. step scan|orb|news|entry|exit|timemachine|budget|risk|ticket|alerts|analyst|pelosi.",
+    "Research any stock or token, then a Marks ticket only if that name is listed. Use this for analyze, research, a market read, what to buy, news, earnings, a setup, entry, exit, odds, size, or risk. An unlisted name is still researched: say it is not on the desk, and do not place an order for it. Yahoo charts, never invents a price. A fill still needs place-order or trade-shares and the person's wallet. step scan|orb|news|entry|exit|timemachine|budget|risk|ticket|alerts|analyst|pelosi.",
   schema: z.object({
     step: Step.describe(
       "scan daily setups, orb opening-range breakouts, news headlines, entry bar check, exit stop/target, timemachine odds, budget size, risk check, ticket show/approve, alerts, analyst earnings, pelosi filings.",
@@ -35,7 +63,7 @@ export default defineAction({
       .string()
       .optional()
       .describe(
-        "A Marks name such as TSLA, tsla, TSLA-PERP, xau or GOLD-PERP.",
+        "Any stock or token. A Marks name such as TSLA or xau is listed. META or PEPE-USD is researched and reported as not listed. A token uses its Yahoo pair.",
       ),
     symbols: z
       .string()
@@ -88,16 +116,20 @@ export default defineAction({
     const list = marksSymbols(
       symbols || (yahoo && step !== "entry" ? yahoo : undefined),
     );
+    const asked = [symbol, symbols].filter((item) => item?.trim()).join(",");
 
     if (step === "scan" || step === "orb") {
       const mode = step === "orb" ? "orb" : "daily";
       const args = [mode, "--symbols", list, "--json", "--min-price", "0"];
       if (mode === "orb" && at) args.push("--at", at);
       const result = await runTool("trader-scanner/scan.py", args, 90_000);
-      return {
-        ...result,
-        next: "A hit is a chart that matched a rule, not a buy. Pick one name, then day-trade step news, then entry.",
-      };
+      return noted(
+        {
+          ...result,
+          next: "Write which names matched a rule, with the price and date from this result. A hit is not a buy. Then day-trade news and analyst on the name they care about. Continue to entry only if they asked to trade a listed name.",
+        },
+        asked,
+      );
     }
 
     if (step === "news") {
@@ -114,10 +146,13 @@ export default defineAction({
         ],
         60_000,
       );
-      return {
-        ...result,
-        next: "Then day-trade step entry on the name they pick.",
-      };
+      return noted(
+        {
+          ...result,
+          next: "Fold these headlines into the research note. Continue to analyst if you have not. Continue to entry only if they asked to trade a listed name.",
+        },
+        asked,
+      );
     }
 
     if (step === "entry") {
@@ -132,12 +167,15 @@ export default defineAction({
         ["check", yahoo, "--json", "--write"],
         45_000,
       );
-      return {
-        ...result,
-        next: result.ok
-          ? "Triggered. Call day-trade step exit to set the stop and target."
-          : "Not triggered yet. Say the status plainly. Do not place an order.",
-      };
+      return noted(
+        {
+          ...result,
+          next: result.ok
+            ? "Triggered. Call day-trade step exit to set the stop and target."
+            : "Not triggered yet. Say the status plainly. Do not place an order.",
+        },
+        asked,
+      );
     }
 
     if (step === "exit") {
@@ -152,10 +190,13 @@ export default defineAction({
       ];
       if (yahoo) args.push("--symbol", yahoo);
       const result = await runTool("trader-exit/exit.py", args, 45_000);
-      return {
-        ...result,
-        next: "Call day-trade step timemachine before sizing. A stop is a plan, not a fill.",
-      };
+      return noted(
+        {
+          ...result,
+          next: "Call day-trade step timemachine before sizing. A stop is a plan, not a fill.",
+        },
+        asked,
+      );
     }
 
     if (step === "timemachine") {
@@ -221,13 +262,19 @@ export default defineAction({
               ).orders[0] ?? null)
             : null;
         const marks = order ? marksTicket(order) : null;
-        return {
-          ...approved,
-          marks,
-          next: approved.ok
-            ? "Recorded their yes. Show the Marks ticket. For shares call trade-shares. For a perp call plan-order then place-order. They press Open wallet on the Marks tab. Never send this to Alpaca."
-            : "That reply is not a yes for this exact order.",
-        };
+        const tradable = Boolean(marks?.share || marks?.market);
+        return noted(
+          {
+            ...approved,
+            marks,
+            next: approved.ok
+              ? tradable
+                ? "Recorded their yes. Show the Marks ticket. For shares call trade-shares. For a perp call plan-order then place-order. They press Open wallet on the Marks tab. Never send this to Alpaca."
+                : "Recorded their yes. This name is not on the Marks desk, so there is nothing to sign. Give the research and stop."
+              : "That reply is not a yes for this exact order.",
+          },
+          order?.symbol || asked,
+        );
       }
       const result = await runTool(
         "trader-broker/ticket.py",
@@ -249,10 +296,13 @@ export default defineAction({
             ? ["quote", yahoo, "--write", "--json"]
             : [sub, "--json"];
       const result = await runTool("trader-alerts/alerts.py", args, 30_000);
-      return {
-        ...result,
-        next: "Alerts watch the Yahoo print. The Marks mark still needs refresh-price if it is stale.",
-      };
+      return noted(
+        {
+          ...result,
+          next: "Alerts watch the Yahoo print. The Marks mark still needs refresh-price if it is stale.",
+        },
+        asked,
+      );
     }
 
     if (step === "analyst") {
@@ -267,7 +317,13 @@ export default defineAction({
         [yahoo, "--json", "--no-filings"],
         60_000,
       );
-      return { ...result, next: "Numbers only. Never call this a buy." };
+      return noted(
+        {
+          ...result,
+          next: "Write the research note from these figures: what changed, the level, and what would break the idea. A note is not an order.",
+        },
+        asked,
+      );
     }
 
     if (step === "pelosi") {

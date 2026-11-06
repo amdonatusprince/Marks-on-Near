@@ -140,6 +140,34 @@ export const refundGift = (send: Send, giftId: number) =>
 export const cancelGift = (send: Send, giftId: number) =>
   send("cancel_gift", { gift_id: giftId }, { gas: GIFT_GAS });
 
+/** Open a gift into the recipient's account. The relayer pays when it is up. */
+export async function claimGift(
+  send: Send,
+  giftId: number,
+  recipient: string,
+  signature: string,
+) {
+  const response = await fetch("/api/gift/claim", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      gift_id: giftId,
+      recipient,
+      signature,
+    }),
+  });
+  const body = (await response.json().catch(() => ({}))) as {
+    hash?: string;
+    error?: string;
+  };
+  if (response.ok && body.hash) return body.hash;
+  return send(
+    "claim_gift",
+    { gift_id: giftId, recipient, signature },
+    { gas: TRANSFER_GAS },
+  );
+}
+
 export const depositToMarks = (
   send: Send,
   token: string,
