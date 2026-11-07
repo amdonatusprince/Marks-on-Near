@@ -1,0 +1,183 @@
+/* From Moi (MIT): https://github.com/ramakrishnanhulk20/Moi. The landing sections, trimmed for Marks. */
+.sec {
+  position: relative;
+  overflow: clip;
+  isolation: isolate;
+  padding: 72px clamp(16px, 4vw, 56px);
+  border-top: 1px solid var(--line);
+}
+
+.sec-label {
+  margin: 0;
+  color: var(--ink-muted);
+  font: 400 12px/1.4 var(--font-mono);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.sec-title {
+  margin: 16px 0 0;
+  color: var(--ink);
+  font-family: var(--font-display);
+  font-size: clamp(2.5rem, 6vw, 5.5rem);
+  font-weight: 900;
+  line-height: 0.95;
+  letter-spacing: -0.02em;
+}
+
+.sec-title-italic {
+  color: var(--gold);
+  font-style: italic;
+}
+
+.sec-lede {
+  max-width: 52ch;
+  margin: 20px 0 0;
+  color: var(--ink-muted);
+  font: 400 18px/1.55 var(--font-body);
+}
+
+.skeleton-line {
+  display: block;
+  border-radius: 2px;
+  background: linear-gradient(
+    90deg,
+    var(--line) 0%,
+    rgba(246, 239, 230, 0.24) 50%,
+    var(--line) 100%
+  );
+  background-size: 200% 100%;
+  animation: sections-shimmer 1.4s linear infinite;
+}
+
+@keyframes sections-shimmer {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: -100% 0;
+  }
+}
+
+.gold-link {
+  position: relative;
+  color: var(--gold);
+}
+
+.gold-link::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -2px;
+  height: 1px;
+  background: currentColor;
+  transform: scaleX(0);
+  transform-origin: left center;
+  transition: transform 250ms ease-out;
+}
+
+.gold-link:hover::after,
+.gold-link:focus-visible::after {
+  transform: scaleX(1);
+}
+
+.how-strip {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 24px;
+  margin-top: 40px;
+}
+
+.how-frame {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: 40px 24px;
+  background: var(--bg-raised);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+/* The sprocket holes of the film: rounded 10 by 14 slots, 18px apart, 12px in from the top and bottom edge */
+.how-frame::before,
+.how-frame::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 14px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='14'%3E%3Crect width='10' height='14' rx='2' fill='%23f6efe6' fill-opacity='0.08'/%3E%3C/svg%3E");
+  background-repeat: repeat-x;
+  background-position: center top;
+  pointer-events: none;
+}
+
+.how-frame::before {
+  top: 12px;
+}
+
+.how-frame::after {
+  bottom: 12px;
+}
+
+.how-number {
+  margin: 0;
+  color: transparent;
+  font-family: var(--font-display);
+  font-size: 80px;
+  font-weight: 900;
+  line-height: 0.8;
+  -webkit-text-stroke: 1.5px var(--gold);
+}
+
+.how-label {
+  margin-top: 24px;
+}
+
+.how-heading {
+  margin: 12px 0 0;
+  color: var(--ink);
+  font-family: var(--font-display);
+  font-size: 30px;
+  font-weight: 600;
+  line-height: 1.05;
+}
+
+.how-body {
+  max-width: 36ch;
+  margin: 14px 0 0;
+  color: var(--ink-muted);
+  font: 400 16px/1.55 var(--font-body);
+}
+
+.how-math {
+  margin-top: auto;
+  padding-top: 24px;
+  color: var(--ink);
+  font: 400 13px/1.6 var(--font-mono);
+}
+
+.how-math b {
+  color: var(--gold);
+  font-weight: 500;
+}
+
+@media (min-width: 768px) {
+  .how-strip {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1280px) {
+  .how-strip {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton-line {
+    animation: none;
+  }
+}
