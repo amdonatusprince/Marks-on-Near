@@ -4,7 +4,7 @@ import { AccountPanel } from "@/components/account-panel";
 import { OrderBook } from "@/components/order-book";
 import { OrderTicket } from "@/components/order-ticket";
 import { PriceChart } from "@/components/price-chart";
-import { fundingWords, money, openInterest, price as priceOf } from "@/lib/format";
+import { fundingWords, grouped, money, openInterest, price as priceOf } from "@/lib/format";
 import { contractSize } from "@/lib/markets";
 import type { CandleBar } from "@/lib/ohlc";
 import type { Book, Market } from "@/lib/rpc";
@@ -29,54 +29,57 @@ export function TradeDesk({
   const unit = contractSize(market.symbol);
 
   return (
-    <div className="grid gap-3 md:h-[calc(100dvh-5.75rem)] md:grid-cols-[minmax(0,1fr)_22rem] md:grid-rows-[minmax(0,1fr)]">
-      <div className="flex flex-col gap-3 md:h-full md:min-h-0">
-        <header className="grid shrink-0 gap-x-6 gap-y-2 rounded-lg border border-border bg-card px-4 py-3 md:grid-cols-[auto_auto_minmax(0,1fr)] md:items-end">
+    <div className="desk">
+      <header className="desk-head flex flex-wrap items-end gap-x-8 gap-y-3 rounded-lg border border-border bg-card px-4 py-3">
+        <div className="min-w-0">
+          <Link
+            href="/markets"
+            className="text-xs text-muted-foreground underline-offset-4 hover:underline focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            Markets
+          </Link>
+          <h1 className="text-2xl font-semibold tracking-tight">{market.symbol}</h1>
+          <p className="text-xs text-muted-foreground">
+            {market.category}
+            {unit ? ` · 1 contract = ${unit}` : " · one contract is priced in USDC"}
+          </p>
+        </div>
+        <div>
+          <p className="text-xs text-muted-foreground">Mark</p>
+          <p className="font-mono text-3xl tabular-nums">
+            {priceOf(market.mark_ticks, market.tick_size)}
+          </p>
+        </div>
+        <dl className="grid min-w-[16rem] flex-1 grid-cols-3 gap-4 text-sm">
           <div>
-            <Link
-              href="/"
-              className="text-xs text-muted-foreground underline-offset-4 hover:underline focus-visible:ring-2 focus-visible:ring-ring"
-            >
-              Markets
-            </Link>
-            <h1 className="text-2xl font-semibold tracking-tight">{market.symbol}</h1>
-            <p className="text-xs text-muted-foreground">
-              {market.category}
-              {unit ? ` · 1 contract = ${unit}` : " · one contract is priced in USDC"}
-            </p>
+            <dt className="text-xs text-muted-foreground">Funding</dt>
+            <dd>{fundingWords(fundingBps)}</dd>
+            <dd className="text-xs text-muted-foreground">
+              {fundingBps === 0 ? "Mark matches the index." : "Settled each hour."}
+            </dd>
           </div>
           <div>
-            <p className="text-xs text-muted-foreground">Price</p>
-            <p className="font-mono text-3xl">{priceOf(market.mark_ticks, market.tick_size)}</p>
+            <dt className="text-xs text-muted-foreground">Open interest</dt>
+            <dd className="font-mono tabular-nums">
+              {openInterest(market.open_interest_lots, market.mark_ticks, market.tick_size)}
+            </dd>
+            <dd className="text-xs text-muted-foreground">
+              {grouped(market.open_interest_lots)}{" "}
+              {market.open_interest_lots === 1 ? "contract" : "contracts"}
+            </dd>
           </div>
-          <dl className="grid grid-cols-3 gap-4 text-sm">
-            <div>
-              <dt className="text-xs text-muted-foreground">Funding</dt>
-              <dd>{fundingWords(fundingBps)}</dd>
-              <dd className="text-xs text-muted-foreground">
-                {fundingBps === 0
-                  ? "Price matches the index, so nobody pays."
-                  : "Paid every few seconds on testnet."}
-              </dd>
-            </div>
-            <div>
-              <dt className="text-xs text-muted-foreground">Open interest</dt>
-              <dd className="font-mono">
-                {openInterest(market.open_interest_lots, market.mark_ticks, market.tick_size)}
-              </dd>
-              <dd className="text-xs text-muted-foreground">
-                {market.open_interest_lots}{" "}
-                {market.open_interest_lots === 1 ? "contract" : "contracts"} open
-              </dd>
-            </div>
-            <div>
-              <dt className="text-xs text-muted-foreground">Traded</dt>
-              <dd className="font-mono">{money(market.volume_quote)}</dd>
-            </div>
-          </dl>
-        </header>
+          <div>
+            <dt className="text-xs text-muted-foreground">Traded</dt>
+            <dd className="font-mono tabular-nums">{money(market.volume_quote)}</dd>
+          </div>
+        </dl>
+      </header>
+      <div className="desk-chart">
         <PriceChart assetId={market.asset_id} candles={history} note={chartNote} />
+      </div>
+      <div className="desk-book">
         <OrderBook
+          symbol={market.symbol}
           bids={book.bids}
           asks={book.asks}
           markTicks={market.mark_ticks}
@@ -86,9 +89,8 @@ export function TradeDesk({
             setPrice(String(ticks));
           }}
         />
-        <AccountPanel symbol={market.symbol} />
       </div>
-      <div className="md:h-full md:min-h-0 md:overflow-y-auto">
+      <div className="desk-ticket">
         <OrderTicket
           symbol={market.symbol}
           markTicks={market.mark_ticks}
@@ -96,9 +98,13 @@ export function TradeDesk({
           price={price}
           side={side}
           maintenanceBps={market.maintenance_margin_bps}
+          initialMarginBps={market.initial_margin_bps}
           onPrice={setPrice}
           onSide={setSide}
         />
+      </div>
+      <div className="desk-account">
+        <AccountPanel symbol={market.symbol} />
       </div>
     </div>
   );

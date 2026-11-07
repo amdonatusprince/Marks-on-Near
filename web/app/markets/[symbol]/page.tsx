@@ -13,14 +13,17 @@ export default async function MarketPage({ params }: { params: Promise<{ symbol:
   const id = contractFor(network);
   if (!id) {
     return (
-      <div className="max-w-prose space-y-2">
-        <Link href="/" className="text-sm text-muted-foreground underline-offset-4 hover:underline">
+      <div className="mx-auto w-full max-w-[1440px] space-y-2 px-3 py-6 md:px-4">
+        <Link
+          href="/markets"
+          className="text-sm text-muted-foreground underline-offset-4 hover:underline"
+        >
           Markets
         </Link>
         <h1 className="text-xl font-semibold">{symbol}</h1>
         <p className="text-sm text-muted-foreground">
           {network === "mainnet"
-            ? "Mainnet has no listing. The header switch selects testnet, where NEAR-PERP is listed."
+            ? "Mainnet has no listing. The header switch selects testnet, where all twelve perps are listed."
             : "Set NEXT_PUBLIC_CONTRACT_ID to the testnet account that holds Marks."}
         </p>
       </div>
@@ -33,19 +36,24 @@ export default async function MarketPage({ params }: { params: Promise<{ symbol:
     const prints = await priceHistory(network, market.asset_id);
     const chart = await chartCandles(market.asset_id, prints);
     return (
-      <TradeDesk
-        market={market}
-        book={book}
-        fundingBps={rate}
-        history={chart.candles}
-        chartNote={chart.note}
-      />
+      <div className="mx-auto w-full max-w-[1440px] px-3 py-3 md:px-4">
+        <TradeDesk
+          market={market}
+          book={book}
+          fundingBps={rate}
+          history={chart.candles}
+          chartNote={chart.note}
+        />
+      </div>
     );
   } catch (error) {
     const message = error instanceof Error ? error.message : "The market could not be read";
     return (
-      <div className="max-w-prose space-y-2">
-        <Link href="/" className="text-sm text-muted-foreground underline-offset-4 hover:underline">
+      <div className="mx-auto w-full max-w-[1440px] space-y-2 px-3 py-6 md:px-4">
+        <Link
+          href="/markets"
+          className="text-sm text-muted-foreground underline-offset-4 hover:underline"
+        >
           Markets
         </Link>
         <h1 className="text-xl font-semibold">{symbol}</h1>
