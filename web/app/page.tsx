@@ -1,109 +1,155 @@
 import Link from "next/link";
-import { fundingWords, money, openInterest, price } from "@/lib/format";
-import { contractFor, type Network } from "@/lib/network";
+import { MarketBoard } from "@/components/market-board";
+import type { CertificateProps } from "@/components/marks/Certificate";
+import { Hero, type TickerEntry } from "@/components/marks/Hero";
+import "@/components/marks/sections.css";
+import { grouped, price } from "@/lib/format";
+import { contractFor } from "@/lib/network";
 import { selectedNetwork } from "@/lib/network-server";
 import { view, type Market } from "@/lib/rpc";
+import type { Share } from "@/lib/v2";
 
 export const dynamic = "force-dynamic";
 
-export default async function Board() {
+const GIFT_ATOMS = BigInt(25_000_000);
+
+const STEPS = [
+  {
+    label: "Faucet",
+    heading: "Claim test USDC",
+    body: "1,000 mock USDC a day, free. Google sign-in, no gas.",
+    math: (
+      <>
+        <b>1,000 mUSDC</b> per account per day
+      </>
+    ),
+  },
+  {
+    label: "Trade",
+    heading: "Perps, shares, calls",
+    body: "12 markets at up to 10x. Calls risk only the premium.",
+    math: (
+      <>
+        call payout <b>min(max(S − K, 0), C − K)</b>
+      </>
+    ),
+  },
+  {
+    label: "Borrow",
+    heading: "Spend without selling",
+    body: "Borrow USDC against a position or your shares.",
+    math: (
+      <>
+        limit <b>collateral + ½ profit − debt − margin</b>, fee <b>1%</b>
+      </>
+    ),
+  },
+  {
+    label: "Gift",
+    heading: "Send it as a link",
+    body: "USDC, a share or a whole position. Your friend claims with Google.",
+    math: (
+      <>
+        fee <b>1%</b>, refundable after <b>1 to 90 days</b>
+      </>
+    ),
+  },
+] as const;
+
+export default async function Home() {
   const network = await selectedNetwork();
-  const id = contractFor(network);
-  if (!id) {
-    return (
-      <Notice
-        title={network === "mainnet" ? "Mainnet has no listing" : "No contract configured"}
-        body={
-          network === "mainnet"
-            ? "Set NEXT_PUBLIC_MAINNET_CONTRACT_ID when a mainnet account is deployed. The header switch selects testnet, where NEAR-PERP is listed."
-            : "Set NEXT_PUBLIC_CONTRACT_ID to the testnet account that holds Marks."
-        }
-      />
-    );
-  }
-  try {
-    const markets = await view<Market[]>(network, "get_markets", {});
-    if (markets.length === 0) {
-      return (
-        <Notice title="No markets yet" body={`${id} has no listings. create_market adds a row.`} />
-      );
-    }
-    return (
-      <div className="space-y-6">
-        <div>
-          <h1 className="text-3xl font-semibold tracking-tight">Markets</h1>
-          <p className="mt-2 max-w-prose text-sm text-muted-foreground">
-            Each row is a market. The price is how many USDC one contract costs. Open interest is
-            the USDC still in open positions. Funding is what longs and shorts pay each other.
-          </p>
-        </div>
-        <div className="overflow-x-auto rounded-lg border border-border bg-card">
-          <table className="w-full min-w-[720px] text-left text-sm">
-            <thead className="border-b border-border text-xs uppercase tracking-wide text-muted-foreground">
-              <tr>
-                <th className="px-4 py-3 font-medium">Symbol</th>
-                <th className="px-4 py-3 font-medium">Category</th>
-                <th className="px-4 py-3 font-medium">Price</th>
-                <th className="px-4 py-3 font-medium">Funding</th>
-                <th className="px-4 py-3 font-medium">Open interest</th>
-                <th className="px-4 py-3 font-medium">Traded</th>
-              </tr>
-            </thead>
-            <tbody>
-              {markets.map((market) => (
-                <tr key={market.symbol} className="border-b border-border last:border-0">
-                  <td className="px-4 py-4">
-                    <Link
-                      href={`/markets/${market.symbol}`}
-                      className="font-medium underline-offset-4 hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                    >
-                      {market.symbol}
-                    </Link>
-                  </td>
-                  <td className="px-4 py-4 text-muted-foreground">{market.category}</td>
-                  <td className="px-4 py-4 font-mono">
-                    {price(market.mark_ticks, market.tick_size)}
-                  </td>
-                  <td className="px-4 py-4">
-                    <Funding network={network} symbol={market.symbol} />
-                  </td>
-                  <td className="px-4 py-4">
-                    <span className="font-mono">
-                      {openInterest(market.open_interest_lots, market.mark_ticks, market.tick_size)}
-                    </span>
-                    <span className="mt-1 block text-xs text-muted-foreground">
-                      {market.open_interest_lots}{" "}
-                      {market.open_interest_lots === 1 ? "contract" : "contracts"}
-                    </span>
-                  </td>
-                  <td className="px-4 py-4 font-mono">{money(market.volume_quote)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    );
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "The RPC call failed";
-    return <Notice title="The board could not load" body={message} />;
-  }
-}
+  const configured = Boolean(contractFor(network));
+  const [markets, shares] = configured
+    ? await Promise.all([
+        view<Market[]>(network, "get_markets", {}).catch(() => [] as Market[]),
+        view<Share[]>(network, "get_shares", {}).catch(() => [] as Share[]),
+      ])
+    : [[] as Market[], [] as Share[]];
 
-async function Funding({ network, symbol }: { network: Network; symbol: string }) {
-  try {
-    const rate = await view<number>(network, "get_funding_rate_bps", { symbol });
-    return <>{fundingWords(rate)}</>;
-  } catch {
-    return <>{"\u2014"}</>;
-  }
-}
+  const ticker: TickerEntry[] = markets
+    .filter((market) => market.mark_ticks > 0)
+    .map((market) => ({
+      name: market.symbol.replace("-PERP", ""),
+      price: price(market.mark_ticks, market.tick_size),
+    }));
+  const nvda = shares.find((share) => share.asset_id === "nvda" && BigInt(share.price) > BigInt(0));
+  const btc = markets.find((market) => market.symbol === "BTC-PERP" && market.mark_ticks > 0);
+  const gift: CertificateProps = nvda
+    ? {
+        figure: grouped(
+          (Number((GIFT_ATOMS * BigInt(1_000_000)) / BigInt(nvda.price)) / 1_000_000).toFixed(4),
+        ),
+        holding: "SHARES OF NVIDIA CORPORATION",
+        worth: "WORTH $25.00 TODAY",
+      }
+    : {
+        verb: "GIFTED",
+        figure: "A LINK",
+        holding: "A POSITION OR A STOCK",
+        worth: "CLAIMED WITH GOOGLE",
+        note: ["FEE", "1 PERCENT"],
+      };
+  const certificates: CertificateProps[] = [
+    {
+      verb: "IS LONG",
+      figure: "10×",
+      holding: "BTC-PERP, SETTLED IN USDC",
+      worth: btc ? `MARK ${price(btc.mark_ticks, btc.tick_size)} A CONTRACT` : null,
+      note: ["OPENED", "IN ONE CLICK"],
+    },
+    {
+      verb: "BORROWED",
+      figure: "$500",
+      holding: "USDC AGAINST AN OPEN POSITION",
+      worth: "WITHOUT SELLING IT",
+      note: ["FEE", "1 PERCENT"],
+    },
+    gift,
+  ];
 
-function Notice({ title, body }: { title: string; body: string }) {
   return (
-    <div className="max-w-prose space-y-2 rounded-lg border border-border bg-card p-6">
-      <h1 className="text-xl font-semibold">{title}</h1>
-      <p className="text-sm text-muted-foreground">{body}</p>
-    </div>
+    <>
+      <Hero ticker={ticker} certificates={certificates} />
+
+      <section className="sec" id="how" aria-labelledby="how-title">
+        <p className="sec-label">How it works</p>
+        <h2 className="sec-title" id="how-title">
+          One balance, <span className="sec-title-italic">four moves.</span>
+        </h2>
+        <p className="sec-lede">One USDC balance on NEAR. Every fee is 1 percent.</p>
+        <ol className="how-strip">
+          {STEPS.map((step, index) => (
+            <li className="how-frame" key={step.label}>
+              <p className="how-number">{String(index + 1).padStart(2, "0")}</p>
+              <p className="sec-label how-label">{step.label}</p>
+              <h3 className="how-heading">{step.heading}</h3>
+              <p className="how-body">{step.body}</p>
+              <p className="how-math">{step.math}</p>
+            </li>
+          ))}
+        </ol>
+      </section>
+
+      <section className="sec" aria-labelledby="board-title">
+        <div className="flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <p className="sec-label">The desk</p>
+            <h2 className="sec-title" id="board-title">
+              Every book, <span className="sec-title-italic">live.</span>
+            </h2>
+          </div>
+          <Link className="btn-line" href="/stocks">
+            Shares and calls
+          </Link>
+        </div>
+        <div className="market-board-reveal mt-10">
+          {markets.length > 0 ? (
+            <MarketBoard network={network} markets={markets} />
+          ) : (
+            <p className="text-ink-muted">The board could not be read right now.</p>
+          )}
+        </div>
+      </section>
+    </>
   );
 }
