@@ -1,8 +1,21 @@
 "use client";
 
-import { dollars, liquidationPrice, money, sizedOrder, ticksFromDollars } from "@/lib/format";
+import { useToast } from "@/components/toast";
+import { marginShortfall } from "@/lib/cover";
+import {
+  dollars,
+  grouped,
+  liquidationPrice,
+  money,
+  sizedOrder,
+  ticksFromDollars,
+} from "@/lib/format";
 import { contractSize } from "@/lib/markets";
-import { useNear } from "@/lib/near";
+import { HEAVY_GAS, ORACLE_FEE, useNear, type ContractCall } from "@/lib/near";
+import type { Network } from "@/lib/network";
+import type { Market } from "@/lib/rpc";
+import { viewClient, type Trader } from "@/lib/rpc-client";
+import { explorerTx } from "@/lib/v2";
 import { useEffect, useId, useRef, useState } from "react";
 
 const control =
@@ -15,6 +28,7 @@ export function OrderTicket({
   price,
   side,
   maintenanceBps,
+  initialMarginBps,
   onPrice,
   onSide,
 }: {
@@ -24,16 +38,16 @@ export function OrderTicket({
   price: string;
   side: "bid" | "ask";
   maintenanceBps: number;
+  initialMarginBps: number;
   onPrice: (value: string) => void;
   onSide: (side: "bid" | "ask") => void;
 }) {
-  const { account, openDialog, send } = useNear();
+  const { account, network, openDialog, send, sendMany } = useNear();
+  const toast = useToast();
   const [kind, setKind] = useState("limit");
   const [amount, setAmount] = useState("300");
   const [priceText, setPriceText] = useState(shownPrice(price, tickSize));
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-  const [hash, setHash] = useState("");
   const priceId = useId();
   const amountId = useId();
   const priceErrorId = useId();
@@ -119,18 +133,32 @@ export function OrderTicket({
             return;
           }
           setBusy(true);
-          setError("");
-          setHash("");
-          void send("place_order", {
+          void place(account, {
             symbol,
             side,
             kind,
-            ticks: Number(nextTicks),
-            lots: Number(nextSized.lots),
+            ticks: nextTicks,
+            lots: nextSized.lots,
+            initialMarginBps,
+            network,
+            send,
+            sendMany,
+            onRefresh: () =>
+              toast.info(
+                "This price is over an hour old. Approve the refresh, then approve the order.",
+              ),
           })
-            .then((tx) => setHash(tx || "Submitted"))
+            .then((tx) => {
+              window.dispatchEvent(new Event("marks-traded"));
+              if (tx) {
+                toast.success("Order placed.", {
+                  href: explorerTx(tx),
+                  label: "View the transaction",
+                });
+              } else toast.success("Order placed.");
+            })
             .catch((caught) =>
-              setError(caught instanceof Error ? caught.message : "The order failed"),
+              toast.error(caught instanceof Error ? caught.message : "The order failed"),
             )
             .finally(() => setBusy(false));
         }}
@@ -186,7 +214,7 @@ export function OrderTicket({
           />
           <p className="mt-1 text-xs text-muted-foreground">
             {sized && sized.lots > BigInt(0)
-              ? `${sized.lots.toString()} ${sized.lots === BigInt(1) ? "contract" : "contracts"}, ${money(sized.cost)}. Margin ${money(sized.margin)}.${
+              ? `${grouped(sized.lots)} ${sized.lots === BigInt(1) ? "contract" : "contracts"}, ${money(sized.cost)}. Margin ${money(sized.margin)}, drawn from your Marks balance.${
                   liquidation ? ` Liquidation about ${money(liquidation)}.` : ""
                 }`
               : sized
@@ -212,14 +240,6 @@ export function OrderTicket({
         >
           {busy ? "Submitting" : account ? (long ? "Buy / Long" : "Sell / Short") : "Sign in"}
         </button>
-        {hash ? (
-          <p className="break-all font-mono text-xs text-muted-foreground">Transaction {hash}</p>
-        ) : null}
-        {error ? (
-          <p className="text-sm text-destructive" role="alert">
-            {error}
-          </p>
-        ) : null}
       </form>
     </section>
   );
@@ -227,4 +247,106 @@ export function OrderTicket({
 
 function shownPrice(ticks: string, tickSize: string) {
   return /^\d+$/.test(ticks) && ticks !== "0" ? dollars(Number(ticks), tickSize) : "";
+}
+
+const PLACE_GAS = "100000000000000";
+/** Inside the contract's one-hour window, so a trade refreshes before the chain rejects it. */
+const STALE_AFTER_NS = BigInt("3000000000000");
+
+async function freshMark(
+  network: Network,
+  symbol: string,
+  send: (
+    methodName: string,
+    args: object,
+    options?: { gas?: string; deposit?: string },
+  ) => Promise<string>,
+  onRefresh: () => void,
+) {
+  const market = await viewClient<Market>(network, "get_market", { symbol });
+  const updated = BigInt(market.mark_updated_ns || "0");
+  const now = BigInt(Date.now()) * BigInt(1_000_000);
+  if (market.mark_ticks > 0 && now - updated <= STALE_AFTER_NS) {
+    return { markTicks: market.mark_ticks, tickSize: market.tick_size };
+  }
+  onRefresh();
+  await send("refresh_mark", { symbol }, { deposit: ORACLE_FEE, gas: HEAVY_GAS });
+  const started = Date.now();
+  while (Date.now() - started < 20_000) {
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+    const next = await viewClient<Market>(network, "get_market", { symbol }).catch(() => null);
+    if (next && BigInt(next.mark_updated_ns || "0") > updated && next.mark_ticks > 0) {
+      return { markTicks: next.mark_ticks, tickSize: next.tick_size };
+    }
+  }
+  throw new Error(
+    "The price feed did not update. Approve the refresh again, then place the order.",
+  );
+}
+
+async function place(
+  account: string,
+  input: {
+    symbol: string;
+    side: "bid" | "ask";
+    kind: string;
+    ticks: bigint;
+    lots: bigint;
+    initialMarginBps: number;
+    network: Network;
+    send: (
+      methodName: string,
+      args: object,
+      options?: { gas?: string; deposit?: string },
+    ) => Promise<string>;
+    sendMany: (calls: ContractCall[]) => Promise<string>;
+    onRefresh: () => void;
+  },
+) {
+  const mark = await freshMark(input.network, input.symbol, input.send, input.onRefresh);
+  let trader: Trader;
+  try {
+    trader = await viewClient<Trader>(input.network, "get_trader", {
+      symbol: input.symbol,
+      account_id: account,
+    });
+  } catch {
+    throw new Error("Could not read the margin on this market.");
+  }
+  const tick = BigInt(mark.tickSize);
+  const need = marginShortfall({
+    collateral: BigInt(trader.collateral || "0"),
+    debt: BigInt(trader.debt || "0"),
+    baseLots: BigInt(trader.base_lots || 0),
+    entryQuote: BigInt(trader.entry_quote_per_lot || "0"),
+    openBidLots: BigInt(trader.open_bid_lots || 0),
+    openAskLots: BigInt(trader.open_ask_lots || 0),
+    side: input.side,
+    lots: input.lots,
+    orderQuote: input.ticks * tick,
+    markQuote: BigInt(mark.markTicks) * tick,
+    initialBps: input.initialMarginBps,
+  });
+  const balance = BigInt(trader.unallocated || "0");
+  if (need > balance) {
+    throw new Error(
+      `This order needs ${money(need)} of margin and your Marks balance has ${money(balance)}.`,
+    );
+  }
+  const order: ContractCall = {
+    methodName: "place_order",
+    args: {
+      symbol: input.symbol,
+      side: input.side,
+      kind: input.kind,
+      ticks: Number(input.ticks),
+      lots: Number(input.lots),
+    },
+    gas: PLACE_GAS,
+  };
+  if (need === BigInt(0)) return input.sendMany([order]);
+  return input.sendMany([
+    { methodName: "commit", args: { symbol: input.symbol, amount: need.toString() } },
+    order,
+  ]);
 }
