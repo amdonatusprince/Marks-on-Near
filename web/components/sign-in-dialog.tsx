@@ -1,6 +1,7 @@
 "use client";
 
 import { ChainIcon } from "@/components/chain-icon";
+import { useNotify } from "@/components/toast";
 import { useNear } from "@/lib/near";
 import { useEffect, useId, useRef } from "react";
 
@@ -17,6 +18,7 @@ export function SignInDialog() {
   const { dialogOpen, closeDialog, signIn, error, network, pending } = useNear();
   const titleId = useId();
   const passkeyRef = useRef<HTMLButtonElement>(null);
+  useNotify(error);
 
   useEffect(() => {
     if (!dialogOpen) return;
@@ -114,11 +116,6 @@ export function SignInDialog() {
             </button>
           ))}
         </div>
-        {error ? (
-          <p className="mt-4 text-sm text-destructive" role="alert">
-            {error}
-          </p>
-        ) : null}
       </div>
     </div>
   );
