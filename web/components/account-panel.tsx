@@ -1,7 +1,9 @@
 "use client";
 
 import { DepositPanel } from "@/components/deposit-panel";
-import { money, quote } from "@/lib/format";
+import { useNotify, useToast } from "@/components/toast";
+import { atomsFromDollars, grouped, money } from "@/lib/format";
+import Link from "next/link";
 import { useNear } from "@/lib/near";
 import { viewClient, type Trader } from "@/lib/rpc-client";
 import { useEffect, useId, useState } from "react";
@@ -14,16 +16,29 @@ export function AccountPanel({ symbol }: { symbol: string }) {
   const [tab, setTab] = useState<"position" | "orders" | "deposit">("position");
   const [trader, setTrader] = useState<Trader | null>(null);
   const [error, setError] = useState("");
+  const [revision, setRevision] = useState(0);
+  useNotify(error);
+
+  useEffect(() => {
+    const refresh = () => setRevision((value) => value + 1);
+    window.addEventListener("marks-traded", refresh);
+    return () => window.removeEventListener("marks-traded", refresh);
+  }, []);
 
   useEffect(() => {
     if (!account) {
       setTrader(null);
+      setError("");
       return;
     }
+    setError("");
     let cancelled = false;
     void viewClient<Trader>(network, "get_trader", { symbol, account_id: account })
       .then((next) => {
-        if (!cancelled) setTrader(next);
+        if (!cancelled) {
+          setTrader(next);
+          setError("");
+        }
       })
       .catch((caught) => {
         if (!cancelled)
@@ -32,7 +47,7 @@ export function AccountPanel({ symbol }: { symbol: string }) {
     return () => {
       cancelled = true;
     };
-  }, [account, network, symbol]);
+  }, [account, network, symbol, revision]);
 
   return (
     <section className="shrink-0 rounded-lg border border-border bg-card">
@@ -88,21 +103,21 @@ function Position({
   symbol: string;
   send: (method: string, args: object) => Promise<string>;
 }) {
+  const toast = useToast();
   const [amount, setAmount] = useState("");
-  const [local, setLocal] = useState("");
   const [busy, setBusy] = useState(false);
-  const [note, setNote] = useState("");
   const id = useId();
-  if (error) return <p className="text-sm text-destructive">{error}</p>;
+  if (error) return <p className="text-sm text-ink-muted">The position could not be loaded.</p>;
   if (!trader) return <p className="text-sm text-muted-foreground">Reading the account…</p>;
   const side = trader.base_lots > 0 ? "Long" : trader.base_lots < 0 ? "Short" : "Flat";
   return (
     <div className="space-y-4">
       <dl className="grid grid-cols-2 gap-3 text-sm">
-        <Stat label="Position" value={`${side} ${Math.abs(trader.base_lots)}`} />
-        <Stat label="Collateral" value={quote(trader.collateral)} />
-        <Stat label="Free" value={quote(trader.free_collateral)} />
-        <Stat label="Unallocated" value={quote(trader.unallocated)} />
+        <Stat label="Position" value={`${side} ${grouped(Math.abs(trader.base_lots))}`} />
+        <Stat label="Collateral" value={money(trader.collateral)} />
+        <Stat label="Free" value={money(trader.free_collateral)} />
+        <Stat label="Marks balance" value={money(trader.unallocated)} />
+        <Stat label="Debt" value={money(trader.debt ?? "0")} />
         <Stat
           label="Liquidation"
           value={
@@ -115,36 +130,44 @@ function Position({
           The position closes if the price reaches {money(trader.liquidation_quote_per_lot)}.
         </p>
       ) : null}
+      {trader.gift_id !== null && trader.gift_id !== undefined ? (
+        <p className="text-xs text-gold">
+          This position is held for gift {trader.gift_id} until it is claimed or refunded.
+        </p>
+      ) : null}
+      <Link className="btn-line w-full text-sm" href={`/borrow?symbol=${symbol}`}>
+        Borrow against this position, up to {money(trader.borrow_limit ?? "0")}
+      </Link>
       <form
         className="space-y-2"
         onSubmit={(event) => {
           event.preventDefault();
-          if (!/^\d+$/.test(amount) || amount === "0") {
-            setLocal("Enter quote atoms to commit.");
+          const atoms = atomsFromDollars(amount);
+          if (atoms === null || atoms === BigInt(0)) {
+            toast.error("Enter the USDC to commit, such as 100.");
             return;
           }
-          setLocal("");
           setBusy(true);
-          setNote("");
-          void send("commit", { symbol, amount })
-            .then(() => setNote("Committed"))
-            .catch((caught) => setLocal(caught instanceof Error ? caught.message : "Commit failed"))
+          void send("commit", { symbol, amount: atoms.toString() })
+            .then(() => toast.success("Committed."))
+            .catch((caught) =>
+              toast.error(caught instanceof Error ? caught.message : "Commit failed"),
+            )
             .finally(() => setBusy(false));
         }}
       >
         <label htmlFor={id} className="text-sm text-muted-foreground">
-          Commit quote atoms
+          Commit USDC from your Marks balance to this market
         </label>
         <input
           id={id}
           className={control}
-          inputMode="numeric"
+          inputMode="decimal"
           autoComplete="off"
+          placeholder="100"
           value={amount}
           onChange={(event) => setAmount(event.target.value)}
         />
-        {local ? <p className="text-sm text-destructive">{local}</p> : null}
-        {note ? <p className="text-sm text-muted-foreground">{note}</p> : null}
         <button
           type="submit"
           disabled={busy}
@@ -166,16 +189,15 @@ function Orders({
   symbol: string;
   send: (method: string, args: object) => Promise<string>;
 }) {
+  const toast = useToast();
   const [orderId, setOrderId] = useState("");
-  const [local, setLocal] = useState("");
   const [busy, setBusy] = useState(false);
-  const [note, setNote] = useState("");
   const id = useId();
   return (
     <div className="space-y-4">
       <p className="text-sm text-muted-foreground">
         {trader
-          ? `Open bids ${trader.open_bid_lots}. Open asks ${trader.open_ask_lots}.`
+          ? `Open bids ${grouped(trader.open_bid_lots)}. Open asks ${grouped(trader.open_ask_lots)}.`
           : "Reading open size…"}
       </p>
       <form
@@ -183,15 +205,15 @@ function Orders({
         onSubmit={(event) => {
           event.preventDefault();
           if (!/^\d+$/.test(orderId)) {
-            setLocal("Enter the order id.");
+            toast.error("Enter the order id.");
             return;
           }
-          setLocal("");
           setBusy(true);
-          setNote("");
           void send("cancel_order", { symbol, order_id: Number(orderId) })
-            .then(() => setNote("Cancelled"))
-            .catch((caught) => setLocal(caught instanceof Error ? caught.message : "Cancel failed"))
+            .then(() => toast.success("Cancelled."))
+            .catch((caught) =>
+              toast.error(caught instanceof Error ? caught.message : "Cancel failed"),
+            )
             .finally(() => setBusy(false));
         }}
       >
@@ -206,8 +228,6 @@ function Orders({
           value={orderId}
           onChange={(event) => setOrderId(event.target.value)}
         />
-        {local ? <p className="text-sm text-destructive">{local}</p> : null}
-        {note ? <p className="text-sm text-muted-foreground">{note}</p> : null}
         <button
           type="submit"
           disabled={busy}
