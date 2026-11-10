@@ -1,22 +1,13 @@
-"use client";
-
 // From Moi (MIT): https://github.com/ramakrishnanhulk20/Moi. Copy and data changed for Marks.
 import { motion, useReducedMotion } from "framer-motion";
-import { Fraunces } from "next/font/google";
-import Link from "next/link";
+import { displayItalic } from "@/marks/lib/fonts";
+import Link from "@/marks/components/link";
 import { useEffect, useState } from "react";
 import type { CertificateProps } from "./Certificate";
 import { Grain } from "./Grain";
 import { HeroStage } from "./HeroStage";
 import { SmoothScroll } from "./SmoothScroll";
 import "./hero.css";
-
-const displayItalic = Fraunces({
-  subsets: ["latin"],
-  style: ["italic"],
-  axes: ["opsz", "SOFT", "WONK"],
-  display: "swap",
-});
 
 const EASE_OUT = [0.16, 1, 0.3, 1] as const;
 
@@ -38,7 +29,8 @@ const SLIDES: readonly {
         { text: "stocks.", italic: true },
       ],
     ],
-    description: "Long or short crypto, gold, oil and US shares. One USDC balance, up to 10x.",
+    description:
+      "Long or short crypto, gold, oil and US shares. One USDC balance, up to 10x.",
   },
   {
     id: "borrow",
@@ -79,7 +71,7 @@ export function Hero({
   certificates,
 }: {
   ticker: TickerEntry[];
-  certificates?: CertificateProps[];
+  certificates?: CertificateProps[] | undefined;
 }) {
   const [index, setIndex] = useState(0);
 
@@ -110,19 +102,6 @@ function HeroCopy({ index }: { index: number }) {
   return (
     <div className="hero-content">
       <div className="hero-inner">
-        <motion.p
-          className="hero-meta"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={reduced ? { duration: 0.3 } : { duration: 0.6, delay: 0.05 }}
-        >
-          <span className="hero-meta-part">PERPS · STOCKS</span>
-          <span className="hero-meta-gap">{"  ·  "}</span>
-          <span className="hero-meta-part">1% LOANS</span>
-          <span className="hero-meta-gap">{"  ·  "}</span>
-          <span className="hero-meta-part">GIFTS BY LINK</span>
-        </motion.p>
-
         <div className="hero-slides" aria-live="off">
           {SLIDES.map((item, itemIndex) => {
             const active = itemIndex === index;
@@ -141,7 +120,11 @@ function HeroCopy({ index }: { index: number }) {
                         <span key={word.text}>
                           {position > 0 ? " " : null}
                           <span
-                            className={word.italic ? "hero-word hero-word-italic" : "hero-word"}
+                            className={
+                              word.italic
+                                ? "hero-word hero-word-italic"
+                                : "hero-word"
+                            }
                             style={
                               word.italic
                                 ? { fontFamily: displayItalic.style.fontFamily }

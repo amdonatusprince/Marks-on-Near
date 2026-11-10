@@ -29,28 +29,12 @@
   display: flex;
   flex-direction: column;
   justify-content: center;
-  padding: 20px clamp(16px, 4vw, 56px) 28px;
+  padding: 20px clamp(16px, 4cqi, 56px) 28px;
   pointer-events: none;
 }
 
 .hero-content a {
   pointer-events: auto;
-}
-
-.hero-meta {
-  margin: 0 0 clamp(16px, 2.4vw, 28px);
-  color: var(--ink-muted);
-  font: 400 12px/1.7 var(--font-mono);
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-}
-
-.hero-meta-part {
-  white-space: nowrap;
-}
-
-.hero-meta-gap {
-  white-space: pre-wrap;
 }
 
 .hero-slides {
@@ -83,7 +67,7 @@
   margin: 0;
   color: var(--ink);
   font-family: var(--font-display);
-  font-size: clamp(3.4rem, 10.5vw, 10rem);
+  font-size: clamp(3.4rem, 10.5cqi, 10rem);
   font-weight: 900;
   line-height: 0.92;
   letter-spacing: -0.035em;
@@ -104,7 +88,7 @@
 
 .hero-sub {
   max-width: 36ch;
-  margin: clamp(18px, 2.4vw, 28px) 0 0;
+  margin: clamp(18px, 2.4cqi, 28px) 0 0;
   color: var(--ink);
   font: 400 17px/1.5 var(--font-body);
 }
@@ -113,7 +97,7 @@
   display: flex;
   flex-direction: column;
   gap: 10px;
-  margin-top: clamp(22px, 3vw, 36px);
+  margin-top: clamp(22px, 3cqi, 36px);
 }
 
 .hero-btn {
@@ -196,7 +180,7 @@
 .hero-ticker-skeletons {
   display: flex;
   gap: 28px;
-  padding-inline: clamp(16px, 4vw, 56px);
+  padding-inline: clamp(16px, 4cqi, 56px);
 }
 
 .skeleton-bar {
@@ -270,7 +254,11 @@
 /* The stage light gives way to the poster spotlight between p 0.55 and 0.85, with no script involved. */
 .hero-light-a {
   background-image:
-    radial-gradient(60% 60% at 70% 40%, rgba(242, 177, 61, 0.16), transparent 70%),
+    radial-gradient(
+      60% 60% at 70% 40%,
+      rgba(242, 177, 61, 0.16),
+      transparent 70%
+    ),
     radial-gradient(
       40% 40% at 20% 80%,
       color-mix(in srgb, var(--maroon) 50%, transparent),
@@ -299,7 +287,11 @@
 
 .hero-light-b {
   background-image:
-    radial-gradient(45% 55% at var(--cx) var(--cy), rgba(242, 177, 61, 0.2), transparent 70%),
+    radial-gradient(
+      45% 55% at var(--cx) var(--cy),
+      rgba(242, 177, 61, 0.2),
+      transparent 70%
+    ),
     radial-gradient(120% 120% at 50% 50%, transparent 55%, rgba(0, 0, 0, 0.65));
   opacity: clamp(0, (var(--p) - 0.55) / 0.3, 1);
 }
@@ -335,7 +327,8 @@
   width: calc(63.4cqh * var(--env-scale));
   height: auto;
   overflow: visible;
-  transform: translate(-50%, -50%) perspective(900px) rotateX(-6.9deg) rotateY(-18.3deg);
+  transform: translate(-50%, -50%) perspective(900px) rotateX(-6.9deg)
+    rotateY(-18.3deg);
 }
 
 /* Reduced motion: the finished picture, standing still. The numbers are the same custom properties the scene reads. */
@@ -359,12 +352,14 @@
   position: absolute;
   left: calc(var(--final-x) * 100%);
   top: calc(var(--final-y) * 100%);
-  width: min(calc(var(--final-w) * 100vw), calc(1.55 * 0.62 * 100vh));
-  transform: translate(-50%, -50%) perspective(1400px) rotateY(-13.75deg) rotateZ(-5.73deg);
+  width: min(calc(var(--final-w) * 100cqi), calc(1.55 * 0.62 * 100cqh));
+  transform: translate(-50%, -50%) perspective(1400px) rotateY(-13.75deg)
+    rotateZ(-5.73deg);
 }
 
-/* Tablet and phone: the stage is a box below the copy, and the envelope sits low enough for the certificate to rise clear of the top */
-@media (max-width: 1023px) {
+/* The docked agent narrows the desk without shrinking the viewport, so the
+   envelope and the copy switch together from this column, not the window. */
+@container marks (max-width: 1023px) {
   .hero {
     --rest-x: 0.5;
     --rest-y: 0.62;
@@ -381,7 +376,7 @@
   }
 
   .hero-light {
-    inset: -40svh -30vw;
+    inset: -40svh -30cqi;
   }
 
   .hero-static-cert {
@@ -390,19 +385,9 @@
   }
 }
 
-/* Phone */
-@media (max-width: 767px) {
+@container marks (max-width: 767px) {
   .hero {
     --final-w: 0.92;
-  }
-
-  /* Three lines, one part each, with no dots left hanging at a line's end */
-  .hero-meta-part {
-    display: block;
-  }
-
-  .hero-meta-gap {
-    display: none;
   }
 
   .hero-stage {
@@ -427,11 +412,11 @@
   }
 }
 
-/* Desktop */
-@media (min-width: 1024px) {
+/* Desktop, including a wide desk beside the agent */
+@container marks (min-width: 1024px) {
   /* The longest line is six em wide, so this keeps it in the left half, clear of the certificate */
   .hero-title {
-    font-size: min(7.6vw, 9.5rem);
+    font-size: min(7.6cqi, 9.5rem);
   }
 
   .hero-title-line {

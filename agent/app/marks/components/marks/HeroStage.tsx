@@ -1,11 +1,10 @@
-"use client";
-
 // From Moi (MIT): https://github.com/ramakrishnanhulk20/Moi.
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
-import dynamic from "next/dynamic";
 import {
   Component,
+  lazy,
+  Suspense,
   useEffect,
   useLayoutEffect,
   useMemo,
@@ -19,9 +18,10 @@ import type { HeroLayout } from "./EnvelopeScene";
 import { useMediaQuery } from "./useMediaQuery";
 
 // The 3D code is a separate download, started only after the first paint, so the hero copy never waits on it.
-const EnvelopeScene = dynamic(
-  () => import("./EnvelopeScene").then((module) => module.EnvelopeScene),
-  { ssr: false },
+const EnvelopeScene = lazy(() =>
+  import("./EnvelopeScene").then((module) => ({
+    default: module.EnvelopeScene,
+  })),
 );
 
 // The claim page's scene fills its own box: the envelope rests in the middle and the certificate lands
@@ -36,10 +36,16 @@ const CLAIM_LAYOUT: HeroLayout = {
 };
 
 /** A browser with no WebGL makes the canvas throw. This keeps that from taking the page down with it. */
-class SceneBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
+class SceneBoundary extends Component<
+  { children: ReactNode; onFail: () => void },
+  { failed: boolean }
+> {
   override state = { failed: false };
   static getDerivedStateFromError() {
     return { failed: true };
+  }
+  override componentDidCatch() {
+    this.props.onFail();
   }
   override render() {
     return this.state.failed ? null : this.props.children;
@@ -78,17 +84,16 @@ export function HeroStage({
 }: {
   layout?: "hero" | "claim";
   progress?: { value: number };
-  certificate?: CertificateProps;
-  certificates?: CertificateProps[];
+  certificate?: CertificateProps | undefined;
+  certificates?: CertificateProps[] | undefined;
   /** Which certificate to show. The hero owns this so the card and the headline change together. */
-  slideIndex?: number;
+  slideIndex?: number | undefined;
 } = {}) {
   const claim = layout === "claim";
   const certificate = useMemo(
     () => (certificates ? { slides: certificates } : single),
     [certificates, single],
   );
-  const compact = useMediaQuery("(max-width: 1023px)");
   const reduced = useMediaQuery("(prefers-reduced-motion: reduce)");
   const stage = useRef<HTMLDivElement>(null);
   const cardLayer = useRef<HTMLDivElement>(null);
@@ -98,49 +103,53 @@ export function HeroStage({
   const [sceneLayout] = useState<HeroLayout>(() =>
     claim
       ? { ...CLAIM_LAYOUT }
-      : { restX: 0.74, restY: 0.5, finalX: 0.68, finalY: 0.58, finalW: 0.54, envScale: 1 },
+      : {
+          restX: 0.74,
+          restY: 0.5,
+          finalX: 0.68,
+          finalY: 0.58,
+          finalW: 0.54,
+          envScale: 1,
+        },
   );
+  const [compact, setCompact] = useState(false);
   const [sceneMounted, setSceneMounted] = useState(false);
+  const [sceneAttempt, setSceneAttempt] = useState(0);
   const [ready, setReady] = useState(false);
   const [inView, setInView] = useState(true);
 
   useEffect(() => {
-    if (claim) return;
     const element = stage.current;
-    const section = element?.closest("section");
-    if (!element || !section) return;
+    const box = claim ? element : (element?.closest("section") ?? element);
+    if (!element || !box) return;
     const apply = () => {
+      const next = box.clientWidth <= 1023;
+      setCompact((was) => (was === next ? was : next));
+      if (claim) return;
+      const section = box;
       readLayout(section, sceneLayout);
       // The spotlight sits on the certificate's final centre. Phones centre it in the box.
       section.style.setProperty(
         "--cx",
-        compact ? "50%" : `${(sceneLayout.finalX * 100).toFixed(2)}%`,
+        next ? "50%" : `${(sceneLayout.finalX * 100).toFixed(2)}%`,
       );
       section.style.setProperty(
         "--cy",
-        compact ? "50%" : `${(sceneLayout.finalY * 100).toFixed(2)}%`,
+        next ? "50%" : `${(sceneLayout.finalY * 100).toFixed(2)}%`,
       );
     };
     apply();
     const observer = new ResizeObserver(apply);
-    observer.observe(element);
-    window.addEventListener("resize", apply);
-    return () => {
-      observer.disconnect();
-      window.removeEventListener("resize", apply);
-    };
-  }, [claim, compact, sceneLayout]);
+    observer.observe(box);
+    return () => observer.disconnect();
+  }, [claim, sceneLayout]);
 
+  // After paint, not after two animation frames. Chrome drops those frames on a
+  // reload (a hidden tab, a context still held by the previous document), and
+  // cancelling them left the closed drawing up for good.
   useEffect(() => {
     if (reduced) return;
-    let second = 0;
-    const first = requestAnimationFrame(() => {
-      second = requestAnimationFrame(() => setSceneMounted(true));
-    });
-    return () => {
-      cancelAnimationFrame(first);
-      cancelAnimationFrame(second);
-    };
+    setSceneMounted(true);
   }, [reduced]);
 
   useEffect(() => {
@@ -166,7 +175,8 @@ export function HeroStage({
       gsap.to(progress, {
         value: 1,
         ease: "none",
-        onUpdate: () => section.style.setProperty("--p", progress.value.toFixed(4)),
+        onUpdate: () =>
+          section.style.setProperty("--p", progress.value.toFixed(4)),
         scrollTrigger: compact
           ? {
               // On phones and tablets only the scene box is pinned, once it sits mid-screen.
@@ -174,6 +184,9 @@ export function HeroStage({
               start: "center center",
               end: () => `+=${Math.round(window.innerHeight * 0.8)}`,
               pin: true,
+              // Stay in the desk column. A fixed pin is the viewport wide and
+              // runs through the agent, which squashes the envelope and the copy.
+              pinType: "transform",
               // The hero is a flex column, and ScrollTrigger skips the spacing under a flex parent unless it is asked outright.
               pinSpacing: true,
               scrub: 0.6,
@@ -186,6 +199,7 @@ export function HeroStage({
               start: "top 72px",
               end: () => `+=${Math.round(window.innerHeight * 1.1)}`,
               pin: true,
+              pinType: "transform",
               // The page column is a flex parent, so the spacing under the pin has to be asked for outright.
               pinSpacing: true,
               scrub: 0.6,
@@ -196,11 +210,18 @@ export function HeroStage({
     }, section);
     let alive = true;
     // Fonts change the height of the copy, which moves the pin points.
-    void document.fonts.ready.then(() => {
+    const refresh = () => {
       if (alive) ScrollTrigger.refresh();
-    });
+    };
+    void document.fonts.ready.then(refresh);
+    window.addEventListener("load", refresh);
+    const desk = section.closest(".marks-app");
+    const deskObserver = desk ? new ResizeObserver(refresh) : null;
+    deskObserver?.observe(desk as Element);
     return () => {
       alive = false;
+      window.removeEventListener("load", refresh);
+      deskObserver?.disconnect();
       context.revert();
       section.style.removeProperty("--p");
       progress.value = 0;
@@ -228,18 +249,32 @@ export function HeroStage({
         <>
           <div className="hero-stage-canvas" aria-hidden="true">
             {sceneMounted ? (
-              <SceneBoundary>
-                <EnvelopeScene
-                  progress={progress}
-                  layout={sceneLayout}
-                  compact={compact}
-                  mode={layout}
-                  certificate={certificate}
-                  slideIndex={slideIndex}
-                  active={inView}
-                  layer={cardLayer}
-                  onFirstFrame={() => setReady(true)}
-                />
+              <SceneBoundary
+                key={sceneAttempt}
+                onFail={() => {
+                  // Chrome often refuses the first context on reload, while the
+                  // previous document still holds one. A later try succeeds.
+                  if (sceneAttempt < 2) {
+                    window.setTimeout(
+                      () => setSceneAttempt((attempt) => attempt + 1),
+                      80,
+                    );
+                  }
+                }}
+              >
+                <Suspense fallback={null}>
+                  <EnvelopeScene
+                    progress={progress}
+                    layout={sceneLayout}
+                    compact={compact}
+                    mode={layout}
+                    certificate={certificate}
+                    slideIndex={slideIndex}
+                    active={inView}
+                    layer={cardLayer}
+                    onFirstFrame={() => setReady(true)}
+                  />
+                </Suspense>
               </SceneBoundary>
             ) : null}
             <div className="hero-card-layer" ref={cardLayer} />
