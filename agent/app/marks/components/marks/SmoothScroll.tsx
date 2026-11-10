@@ -1,5 +1,3 @@
-"use client";
-
 // From Moi (MIT): https://github.com/ramakrishnanhulk20/Moi.
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
@@ -32,11 +30,34 @@ export function SmoothScroll() {
   // for one more frame after the pin has been put back, which is the frame React removes the page.
   useLayoutEffect(() => {
     gsap.registerPlugin(ScrollTrigger);
-    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    const instance = reduced ? null : new Lenis({ lerp: 0.16, smoothWheel: true });
+    const reduced = window.matchMedia(
+      "(prefers-reduced-motion: reduce)",
+    ).matches;
+    const instance = reduced
+      ? null
+      : new Lenis({
+          lerp: 0.16,
+          smoothWheel: true,
+          // The page scroll drives the hero pin. A wheel over the docked chat
+          // belongs to the message list, which scrolls on its own.
+          prevent: (node) =>
+            node instanceof Element &&
+            Boolean(
+              node.closest(".agent-sidebar-panel, .message-scroller-viewport"),
+            ),
+        });
     let tick: ((time: number) => void) | null = null;
     if (instance) {
-      instance.on("scroll", ScrollTrigger.update);
+      // Chrome fires the native scroll event in the same turn that ScrollTrigger
+      // pins the hero. Without this guard the two call each other until the
+      // page locks, which is what a reload was doing.
+      let depth = 0;
+      instance.on("scroll", () => {
+        if (depth > 0) return;
+        depth += 1;
+        ScrollTrigger.update();
+        depth -= 1;
+      });
       tick = (time: number) => instance.raf(time * 1000);
       gsap.ticker.add(tick);
       // Lenis already smooths the motion; a catch-up pause after a slow frame would make it stutter.
