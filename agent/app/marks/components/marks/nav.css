@@ -60,14 +60,8 @@
   color: var(--gold);
 }
 
-.site-tools,
 .site-nav-cta {
   display: none;
-}
-
-.site-sheet-tools {
-  padding: 12px clamp(16px, 4vw, 56px) 16px;
-  border-top: 1px solid var(--line);
 }
 
 .site-sheet-link[aria-current="page"] {
@@ -121,27 +115,43 @@
   color: var(--bg);
 }
 
-/* Phone menu: a text button in the bar and a sheet that drops from under it */
+.site-account-bar {
+  display: none;
+  align-items: center;
+}
+
+.site-sheet-account {
+  display: flex;
+  align-items: center;
+  min-height: 52px;
+  padding-inline: clamp(16px, 4vw, 56px);
+  border-top: 1px solid var(--line);
+}
+
+/* Narrow bar: product links live in the sheet. Agent stays beside the menu. */
 .site-menu-button {
   display: inline-flex;
   align-items: center;
-  min-height: 44px;
-  padding: 0 4px;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
   border: 0;
+  border-radius: 8px;
   background: none;
   color: var(--ink);
-  font: 400 12px/1 var(--font-mono);
-  letter-spacing: 0.18em;
   cursor: pointer;
 }
 
-.site-menu-label,
+.site-menu-icon {
+  display: block;
+}
+
 .site-sheet-label {
   position: relative;
   padding-block: 6px;
 }
 
-.site-menu-label::after,
 .site-sheet-label::after {
   content: "";
   position: absolute;
@@ -155,7 +165,10 @@
   transition: transform 250ms ease-out;
 }
 
-.site-menu-button:hover .site-menu-label::after,
+.site-menu-button:hover {
+  background: rgba(246, 239, 230, 0.04);
+}
+
 .site-sheet-link:hover .site-sheet-label::after {
   transform: scaleX(1);
 }
@@ -213,26 +226,21 @@
   .site-nav {
     height: 72px;
   }
+}
+
+@container marks (min-width: 1024px) {
+  .site-links,
+  .site-account-bar {
+    display: flex;
+  }
 
   .site-nav-cta {
     display: inline-flex;
-  }
-}
-
-@media (min-width: 1024px) {
-  .site-links {
-    display: flex;
   }
 
   .site-menu-button,
   .site-sheet {
     display: none;
-  }
-}
-
-@media (min-width: 1280px) {
-  .site-tools {
-    display: flex;
   }
 }
 
@@ -242,8 +250,13 @@
   }
 
   .site-sheet-link,
-  .site-menu-label::after,
   .site-sheet-label::after {
     transition: none;
   }
+}
+
+/* The docked agent panel narrows the page without changing the viewport, so controls keep one line. */
+.site-nav-right > a,
+.site-nav-right > button {
+  white-space: nowrap;
 }
