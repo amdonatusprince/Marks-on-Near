@@ -111,10 +111,12 @@
   stroke-linejoin: round;
   /* --hand-len is the pen stroke's length, measured once in Certificate. The gap is twice the dash so a
      round cap never shows at the end of the stroke while it is still hidden. */
-  stroke-dasharray: calc(var(--hand-len, 1000) * 1px) calc(var(--hand-len, 1000) * 2px);
+  stroke-dasharray: calc(var(--hand-len, 1000) * 1px)
+    calc(var(--hand-len, 1000) * 2px);
   /* The claim page sets --hand (0 to 1) on its stage. The hero sets only --p, and the pen follows it. */
   stroke-dashoffset: calc(
-    var(--hand-len, 1000) * 1px * (1 - var(--hand, clamp(0, (var(--p) - 0.62) * 5, 1)))
+    var(--hand-len, 1000) * 1px *
+      (1 - var(--hand, clamp(0, (var(--p) - 0.62) * 5, 1)))
   );
 }
 

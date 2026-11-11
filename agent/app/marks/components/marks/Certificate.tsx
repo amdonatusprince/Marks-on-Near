@@ -1,9 +1,7 @@
-"use client";
-
 // From Moi (MIT): https://github.com/ramakrishnanhulk20/Moi. Wording and data source changed for Marks.
 import { useEffect, useRef, useState } from "react";
 import { useMediaQuery } from "./useMediaQuery";
-import { NEAR_PATH } from "@/components/chain-icon";
+import { NEAR_PATH } from "@/marks/components/chain-icon";
 import "./certificate.css";
 
 const WIDTH = 880;
@@ -36,9 +34,16 @@ const EDGES: readonly Edge[] = [
 
 // One sine wave as joined quadratic curves, one per half wave. The first curve starts a little
 // before the band does, by the phase, and the clip path hides whatever runs past the band.
-function sineWave(edge: Edge, half: number, amplitude: number, phaseTurns: number): string {
+function sineWave(
+  edge: Edge,
+  half: number,
+  amplitude: number,
+  phaseTurns: number,
+): string {
   const at = (along: number, across: number) =>
-    edge.vertical ? `${fixed(across)} ${fixed(along)}` : `${fixed(along)} ${fixed(across)}`;
+    edge.vertical
+      ? `${fixed(across)} ${fixed(along)}`
+      : `${fixed(along)} ${fixed(across)}`;
   let position = edge.from - phaseTurns * half * 2;
   let path = `M${at(position, edge.centre)}Q${at(position + half / 2, edge.centre - 2 * amplitude)} ${at(position + half, edge.centre)}`;
   position += half;
@@ -56,7 +61,12 @@ const BAND_WAVES: readonly string[] = EDGES.flatMap((edge) => [
 ]);
 
 // A rosette: a circle whose radius swells and shrinks, repeated at turning angles so the curves overlap.
-function rosette(radius: number, depth: number, petals: number, turn: number): string {
+function rosette(
+  radius: number,
+  depth: number,
+  petals: number,
+  turn: number,
+): string {
   const steps = 72;
   let path = "";
   for (let step = 0; step <= steps; step += 1) {
@@ -96,11 +106,11 @@ export type CertificateProps = {
   /** The two lines in the bottom-right corner. "CLAIMED / WITH ONE LINK" when left out. */
   note?: readonly [string, string];
   /** Several cards shown in turn, one every few seconds. */
-  slides?: readonly CertificateProps[];
+  slides?: readonly CertificateProps[] | undefined;
   /**
    * Which card to show, when a parent owns the timer. Left out, the certificate advances itself.
    */
-  slideIndex?: number;
+  slideIndex?: number | undefined;
 };
 
 const SLIDE_MS = 3200;
@@ -122,7 +132,9 @@ export function Certificate(props: CertificateProps = {}) {
     );
     return () => window.clearInterval(timer);
   }, [slides, reduced]);
-  const shown = slides && slides.length > 0 ? slides[slide % slides.length] : props;
+  const shown =
+    (slides && slides.length > 0 ? slides[slide % slides.length] : undefined) ??
+    props;
   const { figure: given, holding, worth } = shown;
   const verb = shown.verb ?? "OWNS";
   const note = shown.note ?? (["CLAIMED", "WITH ONE LINK"] as const);
@@ -132,7 +144,9 @@ export function Certificate(props: CertificateProps = {}) {
       : ({ state: "ready", text: given } as const);
   const worthLine = worth ?? null;
   const holdingText = useRef<SVGTextElement>(null);
-  const desktop = useMediaQuery("(hover: hover) and (pointer: fine) and (min-width: 1024px)");
+  const desktop = useMediaQuery(
+    "(hover: hover) and (pointer: fine) and (min-width: 1024px)",
+  );
   const root = useRef<HTMLDivElement>(null);
   const sheen = useRef<HTMLDivElement>(null);
   const hand = useRef<SVGPathElement>(null);
@@ -140,7 +154,8 @@ export function Certificate(props: CertificateProps = {}) {
   // The dash pattern needs the real length of the pen stroke. It is measured once here and read by CSS.
   useEffect(() => {
     const path = hand.current;
-    if (path) path.style.setProperty("--hand-len", path.getTotalLength().toFixed(1));
+    if (path)
+      path.style.setProperty("--hand-len", path.getTotalLength().toFixed(1));
   }, []);
 
   // A name that would run past the inner frame is squeezed to fit. Measured after the font loads.
@@ -170,7 +185,8 @@ export function Certificate(props: CertificateProps = {}) {
     const step = () => {
       current += (target - current) * 0.12;
       band.style.setProperty("--sheen", `${current.toFixed(2)}%`);
-      frame = Math.abs(target - current) > 0.05 ? requestAnimationFrame(step) : 0;
+      frame =
+        Math.abs(target - current) > 0.05 ? requestAnimationFrame(step) : 0;
     };
     const onMove = (event: PointerEvent) => {
       const box = element.getBoundingClientRect();
@@ -179,7 +195,10 @@ export function Certificate(props: CertificateProps = {}) {
       const dy = event.clientY - (box.top + box.height / 2);
       target = Math.min(
         130,
-        Math.max(-30, ((dx * Math.sin(angle) - dy * Math.cos(angle)) / length + 0.5) * 100),
+        Math.max(
+          -30,
+          ((dx * Math.sin(angle) - dy * Math.cos(angle)) / length + 0.5) * 100,
+        ),
       );
       if (frame === 0) frame = requestAnimationFrame(step);
     };
@@ -256,12 +275,21 @@ export function Certificate(props: CertificateProps = {}) {
           className="cert-frame cert-frame-edge"
         />
 
-        <path d={NEAR_PATH} transform="translate(425.6 96) scale(1.2)" className="cert-near" />
+        <path
+          d={NEAR_PATH}
+          transform="translate(425.6 96) scale(1.2)"
+          className="cert-near"
+        />
         <text x={440 + 5.7} y={158} textAnchor="middle" className="cert-moi">
           MARKS
         </text>
 
-        <text x={440} y={190} textAnchor="middle" className="cert-mono cert-mono-12">
+        <text
+          x={440}
+          y={190}
+          textAnchor="middle"
+          className="cert-mono cert-mono-12"
+        >
           THIS CERTIFIES THAT
         </text>
 
@@ -269,8 +297,16 @@ export function Certificate(props: CertificateProps = {}) {
           <path d={HAND_PATH} className="cert-hand" ref={hand} />
         </g>
 
-        <g key={slide} className={slides && slides.length > 1 ? "cert-swap" : undefined}>
-          <text x={440} y={278} textAnchor="middle" className="cert-mono cert-mono-12">
+        <g
+          key={slide}
+          className={slides && slides.length > 1 ? "cert-swap" : undefined}
+        >
+          <text
+            x={440}
+            y={278}
+            textAnchor="middle"
+            className="cert-mono cert-mono-12"
+          >
             {verb}
           </text>
 
@@ -279,7 +315,14 @@ export function Certificate(props: CertificateProps = {}) {
               {figure.text}
             </text>
           ) : figure.state === "loading" ? (
-            <rect x={366} y={296} width={148} height={46} rx={4} className="skeleton-svg" />
+            <rect
+              x={366}
+              y={296}
+              width={148}
+              height={46}
+              rx={4}
+              className="skeleton-svg"
+            />
           ) : null}
 
           <text
@@ -293,21 +336,46 @@ export function Certificate(props: CertificateProps = {}) {
           </text>
 
           {worthLine !== null ? (
-            <text x={440} y={386} textAnchor="middle" className="cert-mono cert-mono-11">
+            <text
+              x={440}
+              y={386}
+              textAnchor="middle"
+              className="cert-mono cert-mono-11"
+            >
               {worthLine}
             </text>
           ) : null}
 
-          <text x={190} y={426} textAnchor="middle" className="cert-mono cert-mono-10">
+          <text
+            x={190}
+            y={426}
+            textAnchor="middle"
+            className="cert-mono cert-mono-10"
+          >
             HELD ON
           </text>
-          <text x={190} y={444} textAnchor="middle" className="cert-mono cert-mono-10">
+          <text
+            x={190}
+            y={444}
+            textAnchor="middle"
+            className="cert-mono cert-mono-10"
+          >
             NEAR
           </text>
-          <text x={690} y={426} textAnchor="middle" className="cert-mono cert-mono-10">
+          <text
+            x={690}
+            y={426}
+            textAnchor="middle"
+            className="cert-mono cert-mono-10"
+          >
             {note[0]}
           </text>
-          <text x={690} y={444} textAnchor="middle" className="cert-mono cert-mono-10">
+          <text
+            x={690}
+            y={444}
+            textAnchor="middle"
+            className="cert-mono cert-mono-10"
+          >
             {note[1]}
           </text>
         </g>
@@ -319,10 +387,19 @@ export function Certificate(props: CertificateProps = {}) {
           fill="url(#cert-seal-gold)"
           className="cert-seal"
         />
-        <circle cx={SEAL.x} cy={SEAL.y} r={SEAL.r - 2.5} className="cert-seal-ring" />
+        <circle
+          cx={SEAL.x}
+          cy={SEAL.y}
+          r={SEAL.r - 2.5}
+          className="cert-seal-ring"
+        />
         <circle cx={SEAL.x} cy={SEAL.y} r={21} className="cert-seal-ring" />
         <text className="cert-seal-text">
-          <textPath href="#cert-seal-arc" textLength={158} lengthAdjust="spacing">
+          <textPath
+            href="#cert-seal-arc"
+            textLength={158}
+            lengthAdjust="spacing"
+          >
             MARKS · MARKS · MARKS ·
           </textPath>
         </text>
