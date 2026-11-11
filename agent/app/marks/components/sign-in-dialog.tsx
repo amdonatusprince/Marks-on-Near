@@ -1,8 +1,6 @@
-"use client";
-
-import { ChainIcon } from "@/components/chain-icon";
-import { useNotify } from "@/components/toast";
-import { useNear } from "@/lib/near";
+import { ChainIcon } from "@/marks/components/chain-icon";
+import { useNotify } from "@/marks/components/toast";
+import { useNear } from "@/marks/lib/near";
 import { useEffect, useId, useRef } from "react";
 
 const chains = [
@@ -15,7 +13,8 @@ const chains = [
 ] as const;
 
 export function SignInDialog() {
-  const { dialogOpen, closeDialog, signIn, error, network, pending } = useNear();
+  const { dialogOpen, closeDialog, signIn, error, network, pending } =
+    useNear();
   const titleId = useId();
   const passkeyRef = useRef<HTMLButtonElement>(null);
   useNotify(error);
@@ -57,10 +56,11 @@ export function SignInDialog() {
             Wondering which to choose?
           </summary>
           <p className="mt-2 text-muted-foreground">
-            A passkey uses Touch ID or Face ID, the same sign-in as near.com. Google opens NEAR Auth
-            on testnet and derives an account from that login. NEAR and EVM wallets sign on{" "}
-            {network}. Solana, Stellar, TON, and Tron open the NEAR wallet list, because the order
-            is a NEAR transaction.
+            A passkey uses Touch ID or Face ID, the same sign-in as near.com.
+            Google opens NEAR Auth on testnet and derives an account from that
+            login. NEAR and EVM wallets sign on {network}. Solana, Stellar, TON,
+            and Tron open the NEAR wallet list, because the order is a NEAR
+            transaction.
           </p>
         </details>
         <button
@@ -73,7 +73,9 @@ export function SignInDialog() {
           <Fingerprint />
           <span className="min-w-0 flex-1">
             <span className="flex items-center justify-between gap-2">
-              <span className="font-medium">Passkey for Touch ID and Face ID</span>
+              <span className="font-medium">
+                Passkey for Touch ID and Face ID
+              </span>
               <span className="shrink-0 rounded-full bg-bid px-2 py-0.5 text-xs font-medium text-bid-foreground">
                 Recommended
               </span>
@@ -93,7 +95,9 @@ export function SignInDialog() {
           <span className="min-w-0 flex-1">
             <span className="block font-medium">Continue with Google</span>
             <span className="mt-1 block text-sm text-muted-foreground">
-              {pending ? "Opening NEAR Auth…" : "Sign in through NEAR Auth on testnet."}
+              {pending
+                ? "Opening NEAR Auth…"
+                : "Sign in through NEAR Auth on testnet."}
             </span>
           </span>
         </button>
@@ -123,7 +127,13 @@ export function SignInDialog() {
 
 function GoogleMark() {
   return (
-    <svg width="28" height="28" viewBox="0 0 48 48" aria-hidden="true" className="shrink-0">
+    <svg
+      width="28"
+      height="28"
+      viewBox="0 0 48 48"
+      aria-hidden="true"
+      className="shrink-0"
+    >
       <path
         fill="#FFC107"
         d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.3 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 8 3.1l5.7-5.7C34.2 6.1 29.4 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.2-.1-2.3-.4-3.5z"
