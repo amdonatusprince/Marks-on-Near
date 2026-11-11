@@ -1,4 +1,4 @@
-import { rpcUrl, type Network } from "@/lib/network";
+import { rpcUrl, type Network } from "@/marks/lib/network";
 
 type SignedTransaction = { encode?: () => Uint8Array };
 
@@ -27,7 +27,8 @@ export function setNightlyNetwork(next: Network) {
  * broadcasts that on FastNEAR, which accepts `send_tx`.
  */
 export function installNightlyRelay() {
-  const near = (window as Window & { nightly?: { near?: NightlyNear } }).nightly?.near;
+  const near = (window as Window & { nightly?: { near?: NightlyNear } }).nightly
+    ?.near;
   if (!near || near.__marks) return;
   const original = near.signTransaction.bind(near);
   near.signTransaction = async (transaction, send) => {
@@ -49,7 +50,10 @@ async function broadcast(signed: SignedTransaction) {
       jsonrpc: "2.0",
       id: "marks",
       method: "send_tx",
-      params: { signed_tx_base64: base64(signed.encode()), wait_until: "EXECUTED" },
+      params: {
+        signed_tx_base64: base64(signed.encode()),
+        wait_until: "EXECUTED",
+      },
     }),
   });
   const body = (await response.json().catch(() => ({}))) as {
