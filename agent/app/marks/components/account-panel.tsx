@@ -1,11 +1,10 @@
-"use client";
-
-import { DepositPanel } from "@/components/deposit-panel";
-import { useNotify, useToast } from "@/components/toast";
-import { atomsFromDollars, grouped, money } from "@/lib/format";
-import Link from "next/link";
-import { useNear } from "@/lib/near";
-import { viewClient, type Trader } from "@/lib/rpc-client";
+import { DepositPanel } from "@/marks/components/deposit-panel";
+import { useNotify, useToast } from "@/marks/components/toast";
+import { atomsFromDollars, grouped, money } from "@/marks/lib/format";
+import Link from "@/marks/components/link";
+import { cancelOrder, commitMargin } from "@/marks/lib/desk-writes";
+import { useNear } from "@/marks/lib/near";
+import { viewClient, type Trader } from "@/marks/lib/rpc-client";
 import { useEffect, useId, useState } from "react";
 
 const control =
@@ -33,7 +32,10 @@ export function AccountPanel({ symbol }: { symbol: string }) {
     }
     setError("");
     let cancelled = false;
-    void viewClient<Trader>(network, "get_trader", { symbol, account_id: account })
+    void viewClient<Trader>(network, "get_trader", {
+      symbol,
+      account_id: account,
+    })
       .then((next) => {
         if (!cancelled) {
           setTrader(next);
@@ -42,7 +44,11 @@ export function AccountPanel({ symbol }: { symbol: string }) {
       })
       .catch((caught) => {
         if (!cancelled)
-          setError(caught instanceof Error ? caught.message : "Could not read the account");
+          setError(
+            caught instanceof Error
+              ? caught.message
+              : "Could not read the account",
+          );
       });
     return () => {
       cancelled = true;
@@ -51,7 +57,11 @@ export function AccountPanel({ symbol }: { symbol: string }) {
 
   return (
     <section className="shrink-0 rounded-lg border border-border bg-card">
-      <div className="flex gap-1 border-b border-border px-2" role="tablist" aria-label="Account">
+      <div
+        className="flex gap-1 border-b border-border px-2"
+        role="tablist"
+        aria-label="Account"
+      >
         {(
           [
             ["position", "Position"],
@@ -107,13 +117,25 @@ function Position({
   const [amount, setAmount] = useState("");
   const [busy, setBusy] = useState(false);
   const id = useId();
-  if (error) return <p className="text-sm text-ink-muted">The position could not be loaded.</p>;
-  if (!trader) return <p className="text-sm text-muted-foreground">Reading the account…</p>;
-  const side = trader.base_lots > 0 ? "Long" : trader.base_lots < 0 ? "Short" : "Flat";
+  if (error)
+    return (
+      <p className="text-sm text-ink-muted">
+        The position could not be loaded.
+      </p>
+    );
+  if (!trader)
+    return (
+      <p className="text-sm text-muted-foreground">Reading the account…</p>
+    );
+  const side =
+    trader.base_lots > 0 ? "Long" : trader.base_lots < 0 ? "Short" : "Flat";
   return (
     <div className="space-y-4">
       <dl className="grid grid-cols-2 gap-3 text-sm">
-        <Stat label="Position" value={`${side} ${grouped(Math.abs(trader.base_lots))}`} />
+        <Stat
+          label="Position"
+          value={`${side} ${grouped(Math.abs(trader.base_lots))}`}
+        />
         <Stat label="Collateral" value={money(trader.collateral)} />
         <Stat label="Free" value={money(trader.free_collateral)} />
         <Stat label="Marks balance" value={money(trader.unallocated)} />
@@ -121,21 +143,28 @@ function Position({
         <Stat
           label="Liquidation"
           value={
-            trader.liquidation_quote_per_lot ? money(trader.liquidation_quote_per_lot) : "None"
+            trader.liquidation_quote_per_lot
+              ? money(trader.liquidation_quote_per_lot)
+              : "None"
           }
         />
       </dl>
       {trader.base_lots !== 0 && trader.liquidation_quote_per_lot ? (
         <p className="text-xs text-muted-foreground">
-          The position closes if the price reaches {money(trader.liquidation_quote_per_lot)}.
+          The position closes if the price reaches{" "}
+          {money(trader.liquidation_quote_per_lot)}.
         </p>
       ) : null}
       {trader.gift_id !== null && trader.gift_id !== undefined ? (
         <p className="text-xs text-gold">
-          This position is held for gift {trader.gift_id} until it is claimed or refunded.
+          This position is held for gift {trader.gift_id} until it is claimed or
+          refunded.
         </p>
       ) : null}
-      <Link className="btn-line w-full text-sm" href={`/borrow?symbol=${symbol}`}>
+      <Link
+        className="btn-line w-full text-sm"
+        href={`/borrow?symbol=${symbol}`}
+      >
         Borrow against this position, up to {money(trader.borrow_limit ?? "0")}
       </Link>
       <form
@@ -148,10 +177,12 @@ function Position({
             return;
           }
           setBusy(true);
-          void send("commit", { symbol, amount: atoms.toString() })
+          void commitMargin(send, symbol, atoms)
             .then(() => toast.success("Committed."))
             .catch((caught) =>
-              toast.error(caught instanceof Error ? caught.message : "Commit failed"),
+              toast.error(
+                caught instanceof Error ? caught.message : "Commit failed",
+              ),
             )
             .finally(() => setBusy(false));
         }}
@@ -209,10 +240,12 @@ function Orders({
             return;
           }
           setBusy(true);
-          void send("cancel_order", { symbol, order_id: Number(orderId) })
+          void cancelOrder(send, symbol, Number(orderId))
             .then(() => toast.success("Cancelled."))
             .catch((caught) =>
-              toast.error(caught instanceof Error ? caught.message : "Cancel failed"),
+              toast.error(
+                caught instanceof Error ? caught.message : "Cancel failed",
+              ),
             )
             .finally(() => setBusy(false));
         }}
@@ -243,7 +276,9 @@ function Orders({
 function Stat({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <dt className="text-xs uppercase tracking-wide text-muted-foreground">{label}</dt>
+      <dt className="text-xs uppercase tracking-wide text-muted-foreground">
+        {label}
+      </dt>
       <dd className="mt-1 font-mono">{value}</dd>
     </div>
   );
