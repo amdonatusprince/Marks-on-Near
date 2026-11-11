@@ -1,5 +1,3 @@
-"use client";
-
 // From Moi (MIT): https://github.com/ramakrishnanhulk20/Moi.
 
 import gsap from "gsap";
@@ -15,7 +13,8 @@ import { useMediaQuery } from "./useMediaQuery";
  * hold with the glow off (a claim that was sent and then failed). "opened" finishes the story.
  * "claimed" is the finished picture, shown at once, for a gift somebody has already opened.
  */
-export type SceneState = "closed" | "dimmed" | "opening" | "half-open" | "opened" | "claimed";
+export type SceneState =
+  "closed" | "dimmed" | "opening" | "half-open" | "opened" | "claimed";
 
 // Seconds into the opening story that EnvelopeScene reads from progress.value (claim layout).
 const HOLD_AT = 1.6;
@@ -46,7 +45,9 @@ export function ClaimStage({
 }) {
   const reduced = useMediaQuery("(prefers-reduced-motion: reduce)");
   const root = useRef<HTMLDivElement>(null);
-  const [progress] = useState(() => ({ value: state === "claimed" ? HAND_END : 0 }));
+  const [progress] = useState(() => ({
+    value: state === "claimed" ? HAND_END : 0,
+  }));
   // The state in which the certificate reached the hold. The glow shows only while that is the state on screen.
   const [heldIn, setHeldIn] = useState<SceneState | null>(null);
 
@@ -57,7 +58,9 @@ export function ClaimStage({
     const showHand = () =>
       box.style.setProperty(
         "--hand",
-        String(Math.min(1, Math.max(0, (progress.value - SETTLE_AT) / HAND_SECONDS))),
+        String(
+          Math.min(1, Math.max(0, (progress.value - SETTLE_AT) / HAND_SECONDS)),
+        ),
       );
     // Every change goes through the timeline, so nothing here sets React state or the progress directly.
     const timeline = gsap.timeline({ onUpdate: showHand });
@@ -68,7 +71,7 @@ export function ClaimStage({
         value: HOLD_AT,
         duration: Math.max(0, HOLD_AT - progress.value),
         ease: "none",
-        onComplete,
+        ...(onComplete ? { onComplete } : {}),
       });
 
     timeline.call(markHeld(false), [], 0);
@@ -76,7 +79,11 @@ export function ClaimStage({
       timeline.set(progress, { value: HAND_END }, 0).call(showHand, [], 0);
     } else if (state === "closed" || state === "dimmed") {
       if (progress.value > 0)
-        timeline.to(progress, { value: 0, duration: progress.value, ease: "none" });
+        timeline.to(progress, {
+          value: 0,
+          duration: progress.value,
+          ease: "none",
+        });
       else timeline.call(showHand, [], 0);
     } else if (state === "opening") {
       toHold(markHeld(true));
@@ -84,8 +91,16 @@ export function ClaimStage({
       toHold();
     } else {
       toHold();
-      timeline.to(progress, { value: SETTLE_AT, duration: SETTLE_AT - HOLD_AT, ease: "none" });
-      timeline.to(progress, { value: HAND_END, duration: HAND_SECONDS, ease: "none" });
+      timeline.to(progress, {
+        value: SETTLE_AT,
+        duration: SETTLE_AT - HOLD_AT,
+        ease: "none",
+      });
+      timeline.to(progress, {
+        value: HAND_END,
+        duration: HAND_SECONDS,
+        ease: "none",
+      });
     }
     return () => {
       timeline.kill();
@@ -118,7 +133,11 @@ export function ClaimStage({
           </div>
         </div>
       ) : (
-        <HeroStage layout="claim" progress={progress} certificate={certificate} />
+        <HeroStage
+          layout="claim"
+          progress={progress}
+          certificate={certificate}
+        />
       )}
       {state === "claimed" ? <span className="claim-stamp">OPENED</span> : null}
     </div>

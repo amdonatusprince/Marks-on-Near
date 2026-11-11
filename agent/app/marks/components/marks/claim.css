@@ -9,7 +9,11 @@
   isolation: isolate;
   background-color: var(--bg);
   background-image:
-    radial-gradient(60% 60% at 50% 32%, rgba(242, 177, 61, 0.16), transparent 70%),
+    radial-gradient(
+      60% 60% at 50% 32%,
+      rgba(242, 177, 61, 0.16),
+      transparent 70%
+    ),
     radial-gradient(
       40% 40% at 20% 80%,
       color-mix(in srgb, var(--maroon) 50%, transparent),
@@ -542,7 +546,8 @@
   width: 63.4cqh;
   height: auto;
   overflow: visible;
-  transform: translate(-50%, -50%) perspective(900px) rotateX(-6.9deg) rotateY(-18.3deg);
+  transform: translate(-50%, -50%) perspective(900px) rotateX(-6.9deg)
+    rotateY(-18.3deg);
 }
 
 /* The glow while the claim is on its way */
@@ -594,7 +599,8 @@
 .claim-static-closed {
   top: 50%;
   width: 63.4cqh;
-  transform: translate(-50%, -50%) perspective(900px) rotateX(-6.9deg) rotateY(-18.3deg);
+  transform: translate(-50%, -50%) perspective(900px) rotateX(-6.9deg)
+    rotateY(-18.3deg);
 }
 
 .claim-static-open {
@@ -661,7 +667,11 @@
     grid-template-rows: minmax(0, 1fr);
     min-height: calc(100svh - 72px);
     background-image:
-      radial-gradient(50% 60% at 30% 48%, rgba(242, 177, 61, 0.16), transparent 70%),
+      radial-gradient(
+        50% 60% at 30% 48%,
+        rgba(242, 177, 61, 0.16),
+        transparent 70%
+      ),
       radial-gradient(
         40% 40% at 80% 85%,
         color-mix(in srgb, var(--maroon) 50%, transparent),

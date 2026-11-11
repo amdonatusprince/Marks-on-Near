@@ -1,5 +1,5 @@
 // From Moi (MIT): https://github.com/ramakrishnanhulk20/Moi.
-import { NEAR_PATH } from "@/components/chain-icon";
+import { NEAR_PATH } from "@/marks/components/chain-icon";
 
 // One world unit of the 3D scene is 150 units here, so this drawing lines up with the canvas.
 const BODY = { w: 360, h: 225 };
@@ -57,7 +57,12 @@ export function EnvelopeFallback({ open }: { open: boolean }) {
 
       {open ? null : (
         <>
-          <circle cx={SEAL.x} cy={SEAL.y} r={SEAL.r} fill="url(#fallback-gold)" />
+          <circle
+            cx={SEAL.x}
+            cy={SEAL.y}
+            r={SEAL.r}
+            fill="url(#fallback-gold)"
+          />
           <circle
             cx={SEAL.x}
             cy={SEAL.y}

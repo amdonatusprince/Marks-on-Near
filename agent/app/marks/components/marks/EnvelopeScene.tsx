@@ -1,7 +1,5 @@
-"use client";
-
 // From Moi (MIT): https://github.com/ramakrishnanhulk20/Moi.
-import { NEAR_PATH } from "@/components/chain-icon";
+import { NEAR_PATH } from "@/marks/components/chain-icon";
 import { Environment, Html, Lightformer } from "@react-three/drei";
 import { Canvas, useFrame } from "@react-three/fiber";
 import gsap from "gsap";
@@ -50,7 +48,9 @@ const CLAIM_HOLD = 1.6;
 const CLAIM_SETTLE = 1.2;
 // The settled certificate never grows taller than this share of the box, so on a wide, short desktop box it stays whole.
 const CLAIM_MAX_HEIGHT_SHARE = 0.9;
-const CLAIM_FINAL_QUAT = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, 0, -0.04));
+const CLAIM_FINAL_QUAT = new THREE.Quaternion().setFromEuler(
+  new THREE.Euler(0, 0, -0.04),
+);
 
 const FLAP_EDGE_LENGTH = Math.hypot(BODY_W / 2, FLAP_H);
 const FLAP_EDGE_ANGLE = Math.atan2(FLAP_H, BODY_W / 2);
@@ -85,7 +85,11 @@ type Parts = {
   seal: RefObject<THREE.Group | null>;
   card: RefObject<THREE.Group | null>;
   face: RefObject<HTMLDivElement | null>;
-  dimmable: readonly { material: THREE.MeshStandardMaterial; base: THREE.Color; glow: number }[];
+  dimmable: readonly {
+    material: THREE.MeshStandardMaterial;
+    base: THREE.Color;
+    glow: number;
+  }[];
   sealMaterials: readonly THREE.Material[];
 };
 
@@ -102,7 +106,11 @@ function makeMaterials() {
     clearcoat: 1,
     clearcoatRoughness: 0.15,
   });
-  const foil = new THREE.MeshStandardMaterial({ color: GOLD, metalness: 1, roughness: 0.25 });
+  const foil = new THREE.MeshStandardMaterial({
+    color: GOLD,
+    metalness: 1,
+    roughness: 0.25,
+  });
   // The seal fades out as it breaks, so both of its materials are transparent from the start.
   const seal = new THREE.MeshStandardMaterial({
     color: GOLD,
@@ -141,7 +149,15 @@ function makeMaterials() {
     base: material.color.clone(),
     glow,
   }));
-  return { body, foil, seal, stamp, liner, dimmable, sealMaterials: [seal, stamp] };
+  return {
+    body,
+    foil,
+    seal,
+    stamp,
+    liner,
+    dimmable,
+    sealMaterials: [seal, stamp],
+  };
 }
 
 /**
@@ -194,7 +210,9 @@ function Animator({
   // the certificate keeps the up-to-the-right tilt of the poster drawing.
   const finalQuats = useMemo(
     () => ({
-      desktop: new THREE.Quaternion().setFromEuler(new THREE.Euler(0, -0.24, 0.1)),
+      desktop: new THREE.Quaternion().setFromEuler(
+        new THREE.Euler(0, -0.24, 0.1),
+      ),
       compact: new THREE.Quaternion().setFromEuler(new THREE.Euler(0, 0, 0.07)),
     }),
     [],
@@ -211,8 +229,16 @@ function Animator({
   }, [compact, claim]);
 
   useFrame((state) => {
-    const { root, tilt, flap, seal, card, face, dimmable, sealMaterials } = parts;
-    if (!root.current || !tilt.current || !flap.current || !seal.current || !card.current) return;
+    const { root, tilt, flap, seal, card, face, dimmable, sealMaterials } =
+      parts;
+    if (
+      !root.current ||
+      !tilt.current ||
+      !flap.current ||
+      !seal.current ||
+      !card.current
+    )
+      return;
 
     let flapT: number;
     let sealT: number;
@@ -222,10 +248,16 @@ function Animator({
       const seconds = Math.max(0, progress.value);
       flapT = eases.power2InOut(clamp01(seconds / CLAIM_FLAP_END));
       sealT = eases.power2In(clamp01(seconds / CLAIM_SEAL_END));
-      travelT = eases.power2InOut(clamp01((seconds - CLAIM_HOLD) / CLAIM_SETTLE));
+      travelT = eases.power2InOut(
+        clamp01((seconds - CLAIM_HOLD) / CLAIM_SETTLE),
+      );
       riseT =
         0.5 *
-          eases.power3Out(clamp01((seconds - CLAIM_RISE_START) / (CLAIM_HOLD - CLAIM_RISE_START))) +
+          eases.power3Out(
+            clamp01(
+              (seconds - CLAIM_RISE_START) / (CLAIM_HOLD - CLAIM_RISE_START),
+            ),
+          ) +
         0.5 * travelT;
     } else {
       const p = clamp01(progress.value);
@@ -270,13 +302,21 @@ function Animator({
     // short canvas 1.35 units would push its top off the screen, so the rise stops where the top has a margin.
     const pixelsPerUnit = size.width / viewport.width;
     const restWorldY = viewport.height * (0.5 - layout.restY);
-    const topMargin = size.width >= 1024 && !claim ? TOP_MARGIN_DESKTOP_PX : TOP_MARGIN_PX;
+    const topMargin =
+      size.width >= 1024 && !claim ? TOP_MARGIN_DESKTOP_PX : TOP_MARGIN_PX;
     const topLimit = viewport.height / 2 - topMargin / pixelsPerUnit;
-    const rise = Math.min(RISE_TO, (topLimit - (CERT_H * envScale) / 2 - restWorldY) / envScale);
-    scratch.pocketPos.set(0, rise * riseT, 0.03).applyMatrix4(tilt.current.matrixWorld);
+    const rise = Math.min(
+      RISE_TO,
+      (topLimit - (CERT_H * envScale) / 2 - restWorldY) / envScale,
+    );
+    scratch.pocketPos
+      .set(0, rise * riseT, 0.03)
+      .applyMatrix4(tilt.current.matrixWorld);
     scratch.tiltInverse.copy(tilt.current.quaternion).invert();
     scratch.localQuat.copy(scratch.slant).slerp(scratch.tiltInverse, riseT);
-    scratch.pocketQuat.copy(tilt.current.quaternion).multiply(scratch.localQuat);
+    scratch.pocketQuat
+      .copy(tilt.current.quaternion)
+      .multiply(scratch.localQuat);
 
     // Final pose: where the poster certificate lands, sized in screen pixels.
     let finalWidth: number;
@@ -288,7 +328,10 @@ function Animator({
     } else {
       finalWidth = compact
         ? layout.finalW * size.width
-        : Math.min(layout.finalW * window.innerWidth, 1.55 * 0.62 * window.innerHeight);
+        : Math.min(
+            layout.finalW * window.innerWidth,
+            1.55 * 0.62 * window.innerHeight,
+          );
     }
     const finalScale = finalWidth / (pixelsPerUnit * CERT_W);
     scratch.finalPos.set(
@@ -297,13 +340,23 @@ function Animator({
       0,
     );
     scratch.finalQuat.copy(
-      claim ? CLAIM_FINAL_QUAT : compact ? finalQuats.compact : finalQuats.desktop,
+      claim
+        ? CLAIM_FINAL_QUAT
+        : compact
+          ? finalQuats.compact
+          : finalQuats.desktop,
     );
 
-    card.current.position.copy(scratch.pocketPos).lerp(scratch.finalPos, travelT);
+    card.current.position
+      .copy(scratch.pocketPos)
+      .lerp(scratch.finalPos, travelT);
     card.current.position.z += LIFT * Math.sin(Math.PI * travelT);
-    card.current.quaternion.copy(scratch.pocketQuat).slerp(scratch.finalQuat, travelT);
-    card.current.scale.setScalar(THREE.MathUtils.lerp(envScale, finalScale, travelT));
+    card.current.quaternion
+      .copy(scratch.pocketQuat)
+      .slerp(scratch.finalQuat, travelT);
+    card.current.scale.setScalar(
+      THREE.MathUtils.lerp(envScale, finalScale, travelT),
+    );
 
     // The part of the certificate still inside the envelope is cut off along the mouth. The cut is
     // released over the first quarter of the flight, once the certificate has started to leave the pocket.
@@ -318,7 +371,8 @@ function Animator({
       const below = clamp01((MOUTH_Y - scratch.bottom.y) / certHeight);
       const inside = clamp01(1 - (scratch.bottom.z - 0.03) / 0.1);
       const released = clamp01(travelT / 0.25);
-      const hidden = below * inside * (1 - released * released * (3 - 2 * released));
+      const hidden =
+        below * inside * (1 - released * released * (3 - 2 * released));
       element.style.visibility = riseT > 0 ? "visible" : "hidden";
       element.style.clipPath =
         hidden > 0.001 ? `inset(0 0 ${(hidden * 100).toFixed(2)}% 0)` : "none";
@@ -352,7 +406,7 @@ function Envelope({
   compact: boolean;
   mode: SceneMode;
   certificate: CertificateProps | undefined;
-  slideIndex?: number;
+  slideIndex?: number | undefined;
   layer: RefObject<HTMLDivElement | null>;
   onFirstFrame: () => void;
 }) {
@@ -377,7 +431,10 @@ function Envelope({
       new THREE.Vector2(BODY_W / 2, 0),
       new THREE.Vector2(0, -FLAP_H),
     ]);
-    return new THREE.ExtrudeGeometry(shape, { depth: 0.01, bevelEnabled: false });
+    return new THREE.ExtrudeGeometry(shape, {
+      depth: 0.01,
+      bevelEnabled: false,
+    });
   }, []);
   // The gold lining is its own triangle just behind the flap, turned to face backwards, so it is the
   // face you see once the flap is open.
@@ -399,7 +456,11 @@ function Envelope({
     const box = geometry.boundingBox;
     if (box) {
       const span = Math.max(box.max.x - box.min.x, box.max.y - box.min.y) || 1;
-      geometry.translate(-(box.min.x + box.max.x) / 2, -(box.min.y + box.max.y) / 2, 0);
+      geometry.translate(
+        -(box.min.x + box.max.x) / 2,
+        -(box.min.y + box.max.y) / 2,
+        0,
+      );
       const scale = 0.28 / span;
       geometry.scale(scale, -scale, 1);
     }
@@ -427,7 +488,10 @@ function Envelope({
 
   // The strips sit just inside each slanted edge of the flap, on both of its faces.
   const edgeMid = { x: BODY_W / 4, y: -FLAP_H / 2 };
-  const edgeNormal = { x: Math.sin(FLAP_EDGE_ANGLE), y: Math.cos(FLAP_EDGE_ANGLE) };
+  const edgeNormal = {
+    x: Math.sin(FLAP_EDGE_ANGLE),
+    y: Math.cos(FLAP_EDGE_ANGLE),
+  };
   const inset = 0.05;
 
   return (
@@ -442,27 +506,51 @@ function Envelope({
       />
       <group ref={root}>
         <group ref={tilt}>
-          <mesh position={[0, 0, BODY_D / 2 - PANEL / 2]} material={materials.body}>
+          <mesh
+            position={[0, 0, BODY_D / 2 - PANEL / 2]}
+            material={materials.body}
+          >
             <boxGeometry args={[BODY_W, BODY_H, PANEL]} />
           </mesh>
-          <mesh position={[0, 0, -(BODY_D / 2 - PANEL / 2)]} material={materials.body}>
+          <mesh
+            position={[0, 0, -(BODY_D / 2 - PANEL / 2)]}
+            material={materials.body}
+          >
             <boxGeometry args={[BODY_W, BODY_H, PANEL]} />
           </mesh>
-          <mesh position={[-(BODY_W / 2 - PANEL / 2), 0, 0]} material={materials.body}>
+          <mesh
+            position={[-(BODY_W / 2 - PANEL / 2), 0, 0]}
+            material={materials.body}
+          >
             <boxGeometry args={[PANEL, BODY_H, BODY_D - 2 * PANEL]} />
           </mesh>
-          <mesh position={[BODY_W / 2 - PANEL / 2, 0, 0]} material={materials.body}>
+          <mesh
+            position={[BODY_W / 2 - PANEL / 2, 0, 0]}
+            material={materials.body}
+          >
             <boxGeometry args={[PANEL, BODY_H, BODY_D - 2 * PANEL]} />
           </mesh>
-          <mesh position={[0, -(BODY_H / 2 - PANEL / 2), 0]} material={materials.body}>
-            <boxGeometry args={[BODY_W - 2 * PANEL, PANEL, BODY_D - 2 * PANEL]} />
+          <mesh
+            position={[0, -(BODY_H / 2 - PANEL / 2), 0]}
+            material={materials.body}
+          >
+            <boxGeometry
+              args={[BODY_W - 2 * PANEL, PANEL, BODY_D - 2 * PANEL]}
+            />
           </mesh>
-          <mesh position={[0, -0.025, -(BODY_D / 2 - PANEL) + 0.0005]} material={materials.liner}>
+          <mesh
+            position={[0, -0.025, -(BODY_D / 2 - PANEL) + 0.0005]}
+            material={materials.liner}
+          >
             <planeGeometry args={[2.3, 1.4]} />
           </mesh>
 
           {FRONT_STRIPS.map((strip, index) => (
-            <mesh key={index} position={strip.position} material={materials.foil}>
+            <mesh
+              key={index}
+              position={strip.position}
+              material={materials.foil}
+            >
               <boxGeometry args={strip.size} />
             </mesh>
           ))}
@@ -487,7 +575,11 @@ function Envelope({
               <boxGeometry args={[FLAP_EDGE_LENGTH * 0.94, 0.02, 0.018]} />
             </mesh>
             <mesh
-              position={[edgeMid.x - edgeNormal.x * inset, edgeMid.y + edgeNormal.y * inset, 0.005]}
+              position={[
+                edgeMid.x - edgeNormal.x * inset,
+                edgeMid.y + edgeNormal.y * inset,
+                0.005,
+              ]}
               rotation={[0, 0, FLAP_EDGE_ANGLE]}
               material={materials.foil}
             >
@@ -544,9 +636,9 @@ export function EnvelopeScene({
   progress: Progress;
   layout: HeroLayout;
   compact: boolean;
-  mode?: SceneMode;
-  certificate?: CertificateProps;
-  slideIndex?: number;
+  mode?: SceneMode | undefined;
+  certificate?: CertificateProps | undefined;
+  slideIndex?: number | undefined;
   active: boolean;
   layer: RefObject<HTMLDivElement | null>;
   onFirstFrame: () => void;
@@ -560,7 +652,11 @@ export function EnvelopeScene({
     >
       <ambientLight intensity={0.6} color="#FFF1DC" />
       <directionalLight position={[-3, 4, 5]} intensity={2.2} color="#FFE3B3" />
-      <directionalLight position={[0, 0.5, 6]} intensity={0.8} color="#FFE3B3" />
+      <directionalLight
+        position={[0, 0.5, 6]}
+        intensity={0.8}
+        color="#FFE3B3"
+      />
       <directionalLight position={[3, 1, -3]} intensity={1.6} color={GOLD} />
       <Environment resolution={256} frames={1}>
         <color attach="background" args={["#2A1E10"]} />
@@ -571,7 +667,13 @@ export function EnvelopeScene({
           position={[-2.6, -0.9, 6.5]}
           scale={[0.8, 6, 1]}
         />
-        <Lightformer form="ring" intensity={1} color={GOLD} position={[5.5, 0.5, 3]} scale={3.5} />
+        <Lightformer
+          form="ring"
+          intensity={1}
+          color={GOLD}
+          position={[5.5, 0.5, 3]}
+          scale={3.5}
+        />
       </Environment>
       <Envelope
         progress={progress}
