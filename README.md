@@ -1,14 +1,21 @@
 # Marks
 
-**Trade perps and stocks on NEAR, borrow against what you hold, and give any of it away as a link.**
+**An agent-native trading desk on NEAR. Trade perps and stocks, borrow against what you hold, pay a bill without selling, and give any of it away as a link.**
 
 **[Live demo](https://marks.leash.market)** · **[NEAR testnet contract](https://testnet.nearblocks.io/address/marks2-6e889d.testnet)** · **[Transactions](#transactions)** · **[Run locally](#quick-start)**
 
-Trading across perpetuals, tokenized stocks, lending and payments is fragmented across separate apps, while most AI market tools stop at advice and cannot safely execute an on-chain action. Marks puts those workflows on one desk and makes the person's wallet the final approval boundary.
+Perpetuals, tokenized stocks, lending and payments live in separate apps, and most AI market tools stop at advice because they cannot safely act on-chain. Marks puts them on one desk and makes the person's wallet the final approval for every write, whether a human clicked or an agent asked.
 
-Marks is an agent-native trading terminal on NEAR. Its agent researches any stock or token, analyzes markets, manages the person's portfolio and prepares trades. One NEAR contract holds a USDC balance per account and runs twelve perpetual order books, a desk that sells tokenized shares at the oracle price, capped calls with a fully paid worst case, and loans against perp positions or shares. Any share, USDC amount or whole open perp position can become a claim link.
+One NEAR contract holds a USDC balance per account and runs:
 
-NEAR is the settlement and account layer: contracts hold balances and positions, every state change is verifiable on testnet, transactions are fast and inexpensive, and the user approves agent-prepared writes with their own wallet. Gift recipients can use Google-backed NEAR accounts, while the claim relayer pays gas without gaining custody. Everything in the demo uses mock USDC on NEAR testnet.
+- twelve perpetual order books
+- a desk that sells tokenized shares at the oracle price
+- capped calls with a fully paid worst case
+- loans against perp positions or shares
+- payment links, paid from the balance or from a loan against a position
+- gifts: any share, USDC amount or open perp position becomes a claim link
+
+The agent researches any stock or token, reads the same chain as the pages, and prepares every write the buttons can do. It never holds a key. NEAR is the settlement layer: every state change is verifiable on testnet, and a gift recipient can use a Google-backed account while the claim relayer pays gas without gaining custody. Marks trades use mock USDC on NEAR testnet. The one mainnet piece is the payment link's cross-chain checkout through NEAR Intents.
 
 ## Quick start
 
@@ -48,8 +55,7 @@ The CI workflow runs Prettier, the app typecheck, Rust formatting and all 93 Rus
 
 ```mermaid
 flowchart LR
-  Faucet["mUSDC faucet"] --> Balance
-  Intents["NEAR Intents, mainnet"] --> Balance["Marks balance"]
+  Faucet["mUSDC faucet"] --> Balance["Marks balance"]
   Balance --> Perps["12 perps"]
   Balance --> Shares["7 shares at the mark"]
   Balance --> Calls["Capped calls"]
@@ -58,14 +64,21 @@ flowchart LR
   Pool["Marks lending pool"] --> Borrow
   Borrow --> Balance
   Balance --> Gifts["Gift escrow"]
-  Balance --> Bills["Pay a bill"]
-  Perps --> Bills
-  Shares --> Bills
   Shares --> Gifts
   Perps --> Gifts
   Gifts -->|"the link key signs the recipient"| Friend["Friend's account"]
+  Link["Payment link"] --> Bills["Pay a bill, testnet"]
+  Balance --> Bills
+  Perps --> Bills
+  Shares --> Bills
+  Bills -->|"shortfall"| Borrow
+  Bills --> Merchant["Merchant account"]
+  Link --> Intents["NEAR Intents, mainnet"]
+  Intents --> Merchant
   Balance --> Out["Withdraw"]
 ```
+
+Paying a link from Marks stays on testnet. The Intents path never touches the Marks balance: it pays USDC straight to the merchant's NEAR mainnet account.
 
 ## Borrow against a position
 
@@ -87,6 +100,69 @@ sequenceDiagram
 ```
 
 Shares borrow the same way with `borrow_against`. The shares are locked, the loan can reach 50 percent of their value, and anyone can sell them to the desk once the debt passes 65 percent.
+
+## Get paid with a link
+
+`/pay` makes a link for one amount, up to $10,000. The link pays the account that created it, and `/checkout/<id>` is the page the payer opens. The id is 16 random characters, and the server keeps the record: amount, recipient, status and deadline. The page and the agent read the same record, so a link means the same thing everywhere.
+
+Where the money goes depends on the recipient account:
+
+| Recipient          | Payer pays with                                                                                                  | Network |
+| ------------------ | ---------------------------------------------------------------------------------------------------------------- | ------- |
+| `*.testnet`        | The Marks balance, a perp, or shares, through the contract's `pay`                                               | testnet |
+| A NEAR mainnet one | USDC from Solana, Ethereum, Base, Arbitrum, Optimism, Polygon, Avalanche, BNB Chain, Gnosis or NEAR, via Intents | mainnet |
+
+```mermaid
+sequenceDiagram
+  participant Payer
+  participant Marks
+  participant Contract as marks2 contract
+  participant Merchant
+  Payer->>Marks: open /checkout/id
+  Payer->>Contract: pay(merchant, amount, source)
+  Note over Contract: source is balance, a perp or a share
+  Contract->>Contract: shortfall borrowed in the same call
+  Contract->>Contract: debt += shortfall + 1% fee
+  Contract-->>Merchant: amount in mUSDC
+  Payer->>Marks: POST /api/checkout/paid with the tx hash
+  Marks->>Contract: verify the pay call, receiver and amount
+  Marks->>Marks: link is paid
+```
+
+The 1% fee applies only to what is borrowed, not to the part the balance covers. A share loan locks the fewest units that keep the debt within 50 percent of their value, and the payer keeps the asset. The agent can run this path itself with `pay-bill`, and the person still signs.
+
+```mermaid
+sequenceDiagram
+  participant Payer
+  participant Marks
+  participant Intents as 1Click quote API
+  participant Merchant
+  Payer->>Marks: choose a chain, enter a refund address
+  Marks->>Intents: EXACT_OUTPUT quote, USDC on NEAR to the merchant
+  Intents-->>Marks: deposit address, amountIn, 20 minute deadline
+  Marks-->>Payer: countdown, address, QR with the amount filled in
+  Payer->>Intents: send amountIn from their own wallet
+  Intents->>Intents: swap and bridge
+  Intents-->>Merchant: exactly the requested USDC
+  Marks->>Intents: poll status
+  Marks->>Marks: link is paid
+```
+
+The payer sends the quoted `amountIn`, which is a little more than the amount because it includes the solver fee. The QR is a Solana Pay or EIP-681 link, so a wallet that opens it fills in the amount. A deposit below the minimum is refunded to the refund address. A deposit above it still pays the merchant exactly the requested amount, and the extra is refunded. Marks never holds that money, and the agent never sends it.
+
+```mermaid
+stateDiagram-v2
+  [*] --> waiting: link created
+  waiting --> processing: Intents quote opened
+  processing --> paid: deposit settled
+  processing --> failed: refunded or incomplete
+  processing --> expired: deadline passes
+  paid --> [*]
+  failed --> [*]
+  expired --> [*]
+```
+
+A quote lives for 20 minutes. When the deadline passes, the checkout page shows "Contact the vendor. This payment link has expired." and `/pay` shows Expired. Refreshing the page restores the countdown and the time left, and a link that is already open cannot be quoted a second time, so a refresh cannot rotate the deposit address.
 
 ## Send a gift
 
@@ -188,6 +264,7 @@ An Apple call from $344 to $379 bought at $14: break-even $358, worst case $14, 
 | ---------------------- | --------------------------------- | --------------- |
 | Borrow on a perp       | 1% of the loan, added to the debt | the fee account |
 | Borrow on shares       | 1% of the loan, added to the debt | the fee account |
+| Pay a bill             | 1% of the borrowed shortfall only | the fee account |
 | Gift USDC or shares    | 1% of the value at the mark       | the fee account |
 | Gift a perp position   | 1% of the position's equity       | the fee account |
 | Perp liquidation       | 1% of closed notional             | the caller      |
@@ -199,7 +276,7 @@ A print more than 25 percent away from the mark is held as pending. The mark mov
 
 ## Gift security
 
-The sender's browser makes a one-time ed25519 key. Marks stores the public half with the gift. The secret half is only in the link, after the `#`. A browser never sends that part of a URL to a server, so the server cannot claim the gift.
+What each piece of a gift does, and what it stops:
 
 | Piece           | What Marks does with it                                                                                               |
 | --------------- | --------------------------------------------------------------------------------------------------------------------- |
@@ -227,16 +304,17 @@ The contract has no admin and no pause. A perp, a share, a call series and the f
 
 ### Public methods added in v2
 
-| Method                                                                                                                                                                       | Effect                                                                          |
-| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
-| `ft_on_transfer` with msg `""` / `"deposit"`, `"pool"` or `"desk"`                                                                                                           | Credits the Marks balance, the lending pool, or the share desk                  |
-| `borrow`, `repay`                                                                                                                                                            | Perp loans against one market                                                   |
-| `borrow_against`, `repay_share_loan`, `liquidate_loan`                                                                                                                       | Share loans                                                                     |
-| `withdraw_supply`                                                                                                                                                            | A pool supplier takes back idle USDC it supplied                                |
-| `list_share`, `refresh_share`, `buy_shares`, `sell_shares`                                                                                                                   | The share desk. A buy needs a price from the last hour. A sell always runs      |
-| `list_series`, `place_option`, `cancel_option`, `settle_series`, `claim_settlement`                                                                                          | Capped calls                                                                    |
-| `create_gift`, `claim_gift`, `cancel_gift`, `refund_gift`                                                                                                                    | Gifts. `cancel_gift` reclaims an open one. `refund_gift` does that after expiry |
-| `get_pool`, `get_shares`, `get_holdings`, `get_share_loans`, `get_series_list`, `get_option_book`, `get_option_position`, `get_gift`, `get_gifts_sent`, `get_gifts_received` | Views                                                                           |
+| Method                                                                                                                                                                       | Effect                                                                                          |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| `ft_on_transfer` with msg `""` / `"deposit"`, `"pool"` or `"desk"`                                                                                                           | Credits the Marks balance, the lending pool, or the share desk                                  |
+| `borrow`, `repay`                                                                                                                                                            | Perp loans against one market                                                                   |
+| `borrow_against`, `repay_share_loan`, `liquidate_loan`                                                                                                                       | Share loans                                                                                     |
+| `pay`                                                                                                                                                                        | Pays a merchant from the balance, a perp or a share. The shortfall is borrowed in the same call |
+| `withdraw_supply`                                                                                                                                                            | A pool supplier takes back idle USDC it supplied                                                |
+| `list_share`, `refresh_share`, `buy_shares`, `sell_shares`                                                                                                                   | The share desk. A buy needs a price from the last hour. A sell always runs                      |
+| `list_series`, `place_option`, `cancel_option`, `settle_series`, `claim_settlement`                                                                                          | Capped calls                                                                                    |
+| `create_gift`, `claim_gift`, `cancel_gift`, `refund_gift`                                                                                                                    | Gifts. `cancel_gift` reclaims an open one. `refund_gift` does that after expiry                 |
+| `get_pool`, `get_shares`, `get_holdings`, `get_share_loans`, `get_series_list`, `get_option_book`, `get_option_position`, `get_gift`, `get_gifts_sent`, `get_gifts_received` | Views                                                                                           |
 
 `get_trader` also returns `debt`, `borrow_limit` and `gift_id`. Events use NEP-297 with standard `marks`, version `2.0.0`.
 
@@ -269,17 +347,9 @@ Deploy, funding, and one live pass of every flow. The seed is a few hundred more
 | Claim that position         | [BZncTPTHP54T…](https://testnet.nearblocks.io/txns/BZncTPTHP54T3JbMtrz4DvwJq4cTvoPmi8h83NCbWUFT) |
 | Buy one capped call         | [3dom23shNqkU…](https://testnet.nearblocks.io/txns/3dom23shNqkU9rsHP9C4yRT2qsnyGrbs3AyvjYyPGkCT) |
 
-## Run it
+## Scripts
 
-```sh
-cargo test --manifest-path contract/Cargo.toml   # 82 tests
-cargo test --manifest-path token/Cargo.toml
-cargo test --manifest-path oracle/Cargo.toml
-npm run format:check
-cd agent && pnpm typecheck && pnpm agent-native:doctor
-```
-
-Stand up v2 on new accounts, or resume a stage:
+Tests and checks are in [Quick start](#quick-start). To stand up v2 on new accounts, or resume a stage:
 
 ```sh
 ./scripts/v2.sh
@@ -348,8 +418,8 @@ See [Quick start](#quick-start) for a fresh checkout. Existing maintainers can r
 | `/markets/:symbol` | Live candles at 1m, 15m, 1h and 1D, a live book, a ticket with the liquidation price, and "Borrow against this position". NEAR, SOL, ETH and BTC tick on every Coinbase trade. The other markets refresh every 4 seconds |
 | `/stocks`          | Buy and sell shares, and a call picker with expiry, premium, break-even, worst case and best case                                                                                                                        |
 | `/borrow`          | Perp and share loans, with the debt and the liquidation price before and after                                                                                                                                           |
-| `/pay`             | Create a payment link for an amount. The link pays the signed-in account                                                                                                                                                 |
-| `/checkout`        | The page a payment link opens. Pay the amount from the Marks balance, borrow the shortfall against a perp or shares, or pay on mainnet through NEAR Intents                                                              |
+| `/pay`             | Create a payment link for an amount, and see every link you made with its id, amount, time and status, five to a page. The link pays the signed-in account                                                               |
+| `/checkout/:id`    | The page a payment link opens. Pay from the Marks balance, borrow the shortfall against a perp or shares, or pay on mainnet through NEAR Intents with a countdown and a QR                                               |
 | `/send`            | Send a share, USDC or a position, with a live certificate preview, the fee, the link, and every gift you sent                                                                                                            |
 | `/g/:id`           | The claim page: envelope, certificate, Google sign-in, the sealed note                                                                                                                                                   |
 | `/portfolio`       | Balances, positions, shares, loans, calls and gifts in one place                                                                                                                                                         |
@@ -363,7 +433,7 @@ The app reads testnet through FastNEAR's RPC. Set `VITE_TESTNET_RPC` in `.env` t
 
 ## Deploy
 
-The production host is a Google Cloud `e2-micro` in `us-central1-a`, with a 30 GB standard persistent disk. The container is one long-lived process behind Caddy at [marks.leash.market](https://marks.leash.market). Publishing it does not move the contracts. Intents stays a dry quote.
+The production host is a Google Cloud `e2-micro` in `us-central1-a`, with a 30 GB standard persistent disk. The container is one long-lived process behind Caddy at [marks.leash.market](https://marks.leash.market). Publishing it does not move the contracts. The checkout's Intents path asks 1Click for live mainnet quotes, and the faucet's cross-chain panel stays a dry quote.
 
 Build the image on this Mac. The VM has 1 GB of RAM, which can run the server and cannot build the image.
 
@@ -390,7 +460,7 @@ On start the container reads `MARKS_KEEPER_KEY` and gives that key to `near-cli`
 
 ## The agent
 
-Press **Agent** in the nav and the agent opens in a panel beside every page. It researches any stock or token through Yahoo-backed tools, says when a name is not listed on Marks, and reads the same chain as the pages before managing this account. What you can do on `/markets`, `/stocks`, `/borrow`, `/send`, `/faucet` and a gift claim page, you can ask for in chat. Before anything is signed, Marks shows an approval card in the tab. Then your own wallet signs. The agent never holds a wallet key.
+Press **Agent** in the nav and the agent opens in a panel beside every page. It researches any stock or token through Yahoo-backed tools, says when a name is not listed on Marks, and reads the same chain as the pages before managing this account. What you can do on `/markets`, `/stocks`, `/borrow`, `/send`, `/pay`, `/checkout`, `/faucet` and a gift claim page, you can ask for in chat. Before anything is signed, Marks shows an approval card in the tab. Then your own wallet signs. The agent never holds a wallet key.
 
 Reads go through server actions (`agent/actions/`, FastNEAR RPC). Writes are typed server actions too, and each one runs the client action of the same name on your Marks tab (`agent/app/marks/lib/desk-actions.ts`), which calls the same function as the page button (`agent/app/marks/lib/desk-writes.ts`). `send-gift` calls `agent/app/marks/lib/create-gift.ts`, the same `create_gift` path as `/send`. The returned link keeps the secret after the `#`. `plan-order` imports `agent/app/marks/lib/order-plan.ts`, the same math as the ticket.
 
@@ -400,9 +470,11 @@ A write puts an approval card in the tab. Press **Open wallet** and sign. The ag
 flowchart LR
   person[You] --> desk[Marks desk tab]
   person --> chat[Agent panel]
-  chat --> reads[list-markets, get-market, get-account, list-shares, day-trade, plan-order]
+  chat --> reads[list-markets, get-market, get-account, list-shares, day-trade, plan-order, list-payment-links, get-payment-link]
   reads --> rpc[FastNEAR RPC]
-  chat --> writes[place-order, send-gift, claim-gift, refund-gift, trade-shares, borrow-usdc, pay-bill, cancel-order, move-usdc, place-option, settle-option]
+  chat --> links[create-payment-link]
+  links --> store[Payment link records]
+  chat --> writes[place-order, cancel-order, commit-margin, trade-shares, refresh-price, borrow-usdc, pay-bill, send-gift, claim-gift, refund-gift, move-usdc, place-option, settle-option]
   chat --> session[Browser session: Marks desk]
   session --> nav[open-market, fill-ticket]
   writes --> session
@@ -418,7 +490,8 @@ flowchart LR
 | `/stocks`          | Buy or sell a share                         | `list-shares`, then `trade-shares`                                                                                                             |
 | `/stocks`          | Buy, write or settle a call                 | `list-shares`, then `place-option` or `settle-option`                                                                                          |
 | `/borrow`          | Borrow or repay against a perp or shares    | `borrow-usdc`                                                                                                                                  |
-| `/checkout`        | Pay a payment link, borrowing the shortfall | `pay-bill`                                                                                                                                     |
+| `/pay`             | Make a payment link, see your links         | `create-payment-link`, `list-payment-links`, `get-payment-link`. Creating a link does not ask for a signature.                                 |
+| `/checkout`        | Pay a testnet link, borrowing the shortfall | `pay-bill { paymentId }`. A mainnet link is paid by the person from their own wallet through Intents. The agent never sends that deposit.      |
 | `/send`            | Gift USDC, shares or a position             | `send-gift`. The chat returns the claim link. `refund-gift` revokes an open one. The link stops working.                                       |
 | `/g/:id`           | Open the gift in the current link           | `claim-gift`. The secret stays in the URL hash and the recipient account is bound into the claim signature.                                    |
 | `/faucet`          | Claim 1,000 mUSDC, deposit or withdraw      | `move-usdc`                                                                                                                                    |
