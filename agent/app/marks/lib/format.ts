@@ -3,7 +3,7 @@ export function grouped(value: bigint | number | string) {
   const text = typeof value === "number" ? String(value) : value.toString();
   const match = /^(-?)(\d+)(\.\d+)?$/.exec(text);
   if (!match) return text;
-  const whole = match[2].replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  const whole = (match[2] ?? "").replace(/\B(?=(\d{3})+(?!\d))/g, ",");
   return `${match[1]}${whole}${match[3] ?? ""}`;
 }
 
@@ -55,12 +55,15 @@ export function quote(atoms: string) {
 export function atomsFromDollars(text: string): bigint | null {
   const trimmed = text.trim().replace(/[$,\s]/g, "");
   if (!/^\d+(\.\d*)?$/.test(trimmed)) return null;
-  const [whole, frac = ""] = trimmed.split(".");
+  const [whole = "0", frac = ""] = trimmed.split(".");
   const digits = `${frac}000000`.slice(0, 6);
   return BigInt(whole) * BigInt(1000000) + BigInt(digits);
 }
 
-export function ticksFromDollars(text: string, tickSize: string): bigint | null {
+export function ticksFromDollars(
+  text: string,
+  tickSize: string,
+): bigint | null {
   const atoms = atomsFromDollars(text);
   const tick = BigInt(tickSize);
   if (atoms === null || tick <= BigInt(0)) return null;
@@ -74,7 +77,8 @@ export function liquidationPrice(
   entry: bigint,
   maintenanceBps: number,
 ) {
-  if (baseLots === BigInt(0) || maintenanceBps >= 10_000 || entry <= BigInt(0)) return null;
+  if (baseLots === BigInt(0) || maintenanceBps >= 10_000 || entry <= BigInt(0))
+    return null;
   const maintenance = BigInt(maintenanceBps);
   const numerator = (collateral - baseLots * entry) * BigInt(10_000);
   const denominator =
