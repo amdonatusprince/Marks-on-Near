@@ -1,23 +1,22 @@
-"use client";
-
-import {
-  ensureGoogleFunded,
-  googleClosed,
-  googleSend,
-  googleSendActions,
-  loginGoogle,
-  logoutGoogle,
-  restoreGoogleAccount,
-} from "@/lib/google-auth";
+// Google sign-in loads its SDKs on first use, since they run only in the browser.
+const google = () => import("@/marks/lib/google-auth");
 import { functionCall } from "near-api-js/lib/transaction";
-import { installNightlyRelay, setNightlyNetwork } from "@/lib/nightly";
-import { NETWORK_COOKIE, rpcUrl, type Network } from "@/lib/network";
-import { contractId } from "@/lib/rpc-client";
-import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { installNightlyRelay, setNightlyNetwork } from "@/marks/lib/nightly";
+import { NETWORK_COOKIE, rpcUrl, type Network } from "@/marks/lib/network";
+import { contractId } from "@/marks/lib/rpc-client";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import { useRouter } from "@/marks/lib/navigation";
 import type { NearConnector, NearWalletBase } from "@hot-labs/near-connect";
 
-type Choice = "google" | "passkey" | "near" | "evm" | "solana" | "stellar" | "ton" | "tron";
+type Choice =
+  "google" | "passkey" | "near" | "evm" | "solana" | "stellar" | "ton" | "tron";
 type Session = "google" | "wallet" | null;
 
 type NearState = {
@@ -32,7 +31,11 @@ type NearState = {
   closeDialog: () => void;
   signIn: (choice: Choice) => Promise<void>;
   signOut: () => Promise<void>;
-  send: (methodName: string, args: object, options?: SendOptions) => Promise<string>;
+  send: (
+    methodName: string,
+    args: object,
+    options?: SendOptions,
+  ) => Promise<string>;
   sendMany: (calls: ContractCall[]) => Promise<string>;
 };
 
@@ -40,16 +43,44 @@ type NearState = {
 export type ContractCall = {
   methodName: string;
   args: object;
-  gas?: string;
-  deposit?: string;
+  gas?: string | undefined;
+  deposit?: string | undefined;
 };
 
 /** Receiver defaults to the Marks contract. Gas in gas units, deposit in yoctoNEAR. */
-export type SendOptions = { receiverId?: string; gas?: string; deposit?: string };
+export type SendOptions = {
+  receiverId?: string | undefined;
+  gas?: string | undefined;
+  deposit?: string | undefined;
+};
 
 export const ONE_YOCTO = "1";
-export const ORACLE_FEE = "20000000000000000000000";
-export const HEAVY_GAS = "300000000000000";
+
+/** Ask the connected wallet to sign a NEAR message. The recipient is Marks. */
+export async function signMarksMessage(network: Network, message: string) {
+  const nonce = crypto.getRandomValues(new Uint8Array(32));
+  const next = await connector(network);
+  const wallet = await next.wallet();
+  const signed = await wallet.signMessage({
+    message,
+    recipient: "Marks",
+    nonce,
+  });
+  const asText = (value: unknown) => {
+    if (typeof value === "string") return value;
+    if (value instanceof Uint8Array) {
+      return btoa(String.fromCharCode(...value));
+    }
+    return String(value);
+  };
+  return {
+    accountId: signed.accountId,
+    publicKey: asText(signed.publicKey),
+    signature: asText(signed.signature),
+    nonce: btoa(String.fromCharCode(...nonce)),
+  };
+}
+export { HEAVY_GAS, ORACLE_FEE } from "@/marks/lib/order-plan";
 
 const NearContext = createContext<NearState | null>(null);
 
@@ -88,8 +119,15 @@ function connector(network: Network) {
       const { NearConnector } = await import("@hot-labs/near-connect");
       const next = new NearConnector({
         network,
-        providers: { testnet: [rpcUrl("testnet")], mainnet: [rpcUrl("mainnet")] },
-        footerBranding: { heading: "Marks", link: "https://near.com", linkText: "near.com" },
+        providers: {
+          testnet: [rpcUrl("testnet")],
+          mainnet: [rpcUrl("mainnet")],
+        },
+        footerBranding: {
+          heading: "Marks",
+          link: "https://near.com",
+          linkText: "near.com",
+        },
       });
       await next.whenManifestLoaded.catch(() => undefined);
       await next.registerWallet(passkeyManifest).catch(() => undefined);
@@ -137,6 +175,14 @@ export function NearProvider({
     sessionRef.current = next;
     setSession(next);
     setAccount(id);
+    if (typeof document !== "undefined") {
+      if (id) document.documentElement.dataset.marksAccount = id;
+      else delete document.documentElement.dataset.marksAccount;
+    }
+    if (typeof sessionStorage !== "undefined") {
+      if (id) sessionStorage.setItem("marks-near-account", id);
+      else sessionStorage.removeItem("marks-near-account");
+    }
   };
 
   useEffect(() => {
@@ -160,11 +206,17 @@ export function NearProvider({
       const existing = await next.getConnectedWallet().catch(() => null);
       const walletAccount = existing?.accounts[0]?.accountId ?? null;
       const googleAccount =
-        network === "testnet" ? await restoreGoogleAccount().catch(() => null) : null;
+        network === "testnet"
+          ? await google()
+              .then((auth) => auth.restoreGoogleAccount())
+              .catch(() => null)
+          : null;
       if (cancelled) return;
       if (googleAccount) {
         remember("google", googleAccount);
-        void ensureGoogleFunded(googleAccount).catch(() => undefined);
+        void google()
+          .then((auth) => auth.ensureGoogleFunded(googleAccount))
+          .catch(() => undefined);
       } else remember(walletAccount ? "wallet" : null, walletAccount);
       setReady(true);
     })();
@@ -189,7 +241,9 @@ export function NearProvider({
         setError("");
         const current = await connector(network);
         await current.disconnect().catch(() => undefined);
-        await logoutGoogle().catch(() => undefined);
+        await google()
+          .then((auth) => auth.logoutGoogle())
+          .catch(() => undefined);
         remember(null, null);
         document.cookie = `${NETWORK_COOKIE}=${next}; Path=/; Max-Age=31536000; SameSite=Lax`;
         setNetworkState(next);
@@ -206,28 +260,39 @@ export function NearProvider({
         try {
           if (choice === "google") {
             if (network !== "testnet") {
-              setError("Google sign-in is available on testnet. Switch the header to testnet.");
+              setError(
+                "Google sign-in is available on testnet. Switch the header to testnet.",
+              );
               return;
             }
-            const id = await loginGoogle();
+            const id = await (await google()).loginGoogle();
             const current = await connector(network);
             await current.disconnect().catch(() => undefined);
             remember("google", id);
             setDialogOpen(false);
-            void ensureGoogleFunded(id).catch(() => undefined);
+            void google()
+              .then((auth) => auth.ensureGoogleFunded(id))
+              .catch(() => undefined);
             return;
           }
-          await logoutGoogle().catch(() => undefined);
+          await google()
+            .then((auth) => auth.logoutGoogle())
+            .catch(() => undefined);
           remember(null, null);
           const next = await connector(network);
           if (choice === "passkey") await next.connect({ walletId: "passkey" });
-          else if (choice === "evm") await next.connect({ walletId: "ethereum-wallets" });
+          else if (choice === "evm")
+            await next.connect({ walletId: "ethereum-wallets" });
           else await next.connect();
           sessionRef.current = "wallet";
           setSession("wallet");
           setDialogOpen(false);
         } catch (caught) {
-          if (googleClosed(caught) || /reject/i.test(messageOf(caught))) return;
+          if (
+            (await google()).googleClosed(caught) ||
+            /reject/i.test(messageOf(caught))
+          )
+            return;
           setError(messageOf(caught));
         } finally {
           setPending(false);
@@ -236,7 +301,9 @@ export function NearProvider({
       signOut: async () => {
         const next = await connector(network);
         await next.disconnect().catch(() => undefined);
-        await logoutGoogle().catch(() => undefined);
+        await google()
+          .then((auth) => auth.logoutGoogle())
+          .catch(() => undefined);
         remember(null, null);
       },
       send: async (methodName, args, options = {}) => {
@@ -246,12 +313,18 @@ export function NearProvider({
         if (!id) {
           throw new Error(
             network === "mainnet"
-              ? "NEXT_PUBLIC_MAINNET_CONTRACT_ID is not set"
-              : "NEXT_PUBLIC_CONTRACT_ID is not set",
+              ? "VITE_MAINNET_CONTRACT_ID is not set"
+              : "VITE_CONTRACT_ID is not set",
           );
         }
         if (session === "google") {
-          return googleSend(methodName, args, id, BigInt(gas), BigInt(deposit));
+          return (await google()).googleSend(
+            methodName,
+            args,
+            id,
+            BigInt(gas),
+            BigInt(deposit),
+          );
         }
         installNightlyRelay();
         const next = await connector(network);
@@ -281,13 +354,14 @@ export function NearProvider({
         if (!id) {
           throw new Error(
             network === "mainnet"
-              ? "NEXT_PUBLIC_MAINNET_CONTRACT_ID is not set"
-              : "NEXT_PUBLIC_CONTRACT_ID is not set",
+              ? "VITE_MAINNET_CONTRACT_ID is not set"
+              : "VITE_CONTRACT_ID is not set",
           );
         }
-        if (calls.length === 0) throw new Error("The transaction has no actions");
+        if (calls.length === 0)
+          throw new Error("The transaction has no actions");
         if (session === "google") {
-          return googleSendActions(
+          return (await google()).googleSendActions(
             id,
             calls.map((call) =>
               functionCall(
