@@ -9,7 +9,11 @@
   isolation: isolate;
   background-color: var(--bg);
   background-image:
-    radial-gradient(55% 45% at 72% 22%, rgba(242, 177, 61, 0.14), transparent 70%),
+    radial-gradient(
+      55% 45% at 72% 22%,
+      rgba(242, 177, 61, 0.14),
+      transparent 70%
+    ),
     radial-gradient(
       40% 40% at 15% 85%,
       color-mix(in srgb, var(--maroon) 50%, transparent),
@@ -897,8 +901,21 @@
 
 .send-gift-actions {
   display: flex;
-  gap: 20px;
-  margin-left: auto;
+  flex-basis: 100%;
+  flex-wrap: wrap;
+  gap: 4px 20px;
+}
+
+.send-gift-actions .send-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 40px;
+  padding: 8px 2px;
+}
+
+.send-gift-actions .send-link:disabled {
+  cursor: progress;
+  opacity: 0.5;
 }
 
 .send-gift-note {
