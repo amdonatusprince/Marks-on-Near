@@ -1,4 +1,4 @@
-import { contractFor, rpcUrl, type Network } from "@/lib/network";
+import { contractFor, rpcUrl, type Network } from "@/marks/lib/network";
 
 export type Market = {
   symbol: string;
@@ -43,13 +43,17 @@ export function contractId(network: Network = "testnet") {
   return contractFor(network);
 }
 
-export async function view<T>(network: Network, method: string, args: object): Promise<T> {
+export async function view<T>(
+  network: Network,
+  method: string,
+  args: object,
+): Promise<T> {
   const account = contractFor(network);
   if (!account) {
     throw new Error(
       network === "mainnet"
-        ? "NEXT_PUBLIC_MAINNET_CONTRACT_ID is not set"
-        : "NEXT_PUBLIC_CONTRACT_ID is not set",
+        ? "VITE_MAINNET_CONTRACT_ID is not set"
+        : "VITE_CONTRACT_ID is not set",
     );
   }
   return viewAccount<T>(network, account, method, args);

@@ -1,17 +1,21 @@
-import { contractFor, rpcUrl, type Network } from "@/lib/network";
-import type { Trader } from "@/lib/rpc";
+import { contractFor, rpcUrl, type Network } from "@/marks/lib/network";
+import type { Trader } from "@/marks/lib/rpc";
 
 export function contractId(network: Network = "testnet") {
   return contractFor(network);
 }
 
-export async function viewClient<T>(network: Network, method: string, args: object): Promise<T> {
+export async function viewClient<T>(
+  network: Network,
+  method: string,
+  args: object,
+): Promise<T> {
   const account = contractFor(network);
   if (!account) {
     throw new Error(
       network === "mainnet"
-        ? "NEXT_PUBLIC_MAINNET_CONTRACT_ID is not set"
-        : "NEXT_PUBLIC_CONTRACT_ID is not set",
+        ? "VITE_MAINNET_CONTRACT_ID is not set"
+        : "VITE_CONTRACT_ID is not set",
     );
   }
   const response = await fetch(rpcUrl(network), {
