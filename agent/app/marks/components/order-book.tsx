@@ -1,9 +1,7 @@
-"use client";
-
-import { grouped, price } from "@/lib/format";
-import { useNear } from "@/lib/near";
-import { viewClient } from "@/lib/rpc-client";
-import type { Level } from "@/lib/rpc";
+import { grouped, price } from "@/marks/lib/format";
+import { useNear } from "@/marks/lib/near";
+import { viewClient } from "@/marks/lib/rpc-client";
+import type { Level } from "@/marks/lib/rpc";
 import { useEffect, useState } from "react";
 
 const POLL_MS = 4_000;
@@ -47,7 +45,12 @@ export function OrderBook({
           }),
           viewClient<{ mark_ticks: number }>(network, "get_market", { symbol }),
         ]);
-        if (!stopped) setBook({ bids: next.bids, asks: next.asks, mark: market.mark_ticks });
+        if (!stopped)
+          setBook({
+            bids: next.bids,
+            asks: next.asks,
+            mark: market.mark_ticks,
+          });
       } catch {
         // The next poll tries again. The book keeps the last good levels.
       } finally {
@@ -89,7 +92,7 @@ export function OrderBook({
           <p className="px-3 py-2 text-sm text-muted-foreground">No asks</p>
         ) : null}
         {shownAsks
-          .map((level, index) => ({ level, total: askTotals[index] }))
+          .map((level, index) => ({ level, total: askTotals[index] ?? 0 }))
           .reverse()
           .map(({ level, total }) => (
             <LevelRow
@@ -104,7 +107,9 @@ export function OrderBook({
           ))}
       </div>
       <p className="flex shrink-0 items-baseline justify-between border-y border-border px-3 py-1.5 font-mono">
-        <span className="text-lg tabular-nums">{price(book.mark, tickSize)}</span>
+        <span className="text-lg tabular-nums">
+          {price(book.mark, tickSize)}
+        </span>
         <span className="text-xs text-muted-foreground">
           {spread != null ? `Spread ${price(spread, tickSize)}` : "Mark"}
         </span>
@@ -119,8 +124,8 @@ export function OrderBook({
             level={level}
             side="bid"
             tickSize={tickSize}
-            total={bidTotals[index]}
-            depth={bidTotals[index] / deepest}
+            total={bidTotals[index] ?? 0}
+            depth={(bidTotals[index] ?? 0) / deepest}
             onPick={onPick}
           />
         ))}
@@ -178,7 +183,9 @@ function LevelRow({
       />
       <span className={`relative ${tone}`}>{price(level.ticks, tickSize)}</span>
       <span className="relative text-right">{grouped(level.lots)}</span>
-      <span className="relative text-right text-muted-foreground">{grouped(total.toFixed(2))}</span>
+      <span className="relative text-right text-muted-foreground">
+        {grouped(total.toFixed(2))}
+      </span>
     </button>
   );
 }
