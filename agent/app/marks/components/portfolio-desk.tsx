@@ -1,10 +1,8 @@
-"use client";
-
-import { BalanceStrip, Stat } from "@/components/v2-ui";
-import { grouped, money } from "@/lib/format";
-import { useNear } from "@/lib/near";
-import type { Market, Trader } from "@/lib/rpc";
-import { useWallet } from "@/lib/use-v2";
+import { BalanceStrip, Stat } from "@/marks/components/v2-ui";
+import { grouped, money } from "@/marks/lib/format";
+import { useNear } from "@/marks/lib/near";
+import type { Market, Trader } from "@/marks/lib/rpc";
+import { useWallet } from "@/marks/lib/use-v2";
 import {
   seriesTitle,
   shareTicker,
@@ -15,8 +13,8 @@ import {
   type OptionPosition,
   type Series,
   type Share,
-} from "@/lib/v2";
-import Link from "next/link";
+} from "@/marks/lib/v2";
+import Link from "@/marks/components/link";
 import { useEffect, useState } from "react";
 
 const ZERO = BigInt(0);
@@ -50,7 +48,10 @@ export function PortfolioDesk({
     void Promise.all([
       Promise.all(
         markets.map((market) =>
-          viewMarks<Trader>(network, "get_trader", { symbol: market.symbol, account_id: account })
+          viewMarks<Trader>(network, "get_trader", {
+            symbol: market.symbol,
+            account_id: account,
+          })
             .then((trader) => ({ market, trader }))
             .catch(() => null),
         ),
@@ -65,12 +66,12 @@ export function PortfolioDesk({
             .catch(() => null),
         ),
       ),
-      viewMarks<Gift[]>(network, "get_gifts_sent", { account_id: account }).catch(
-        () => [] as Gift[],
-      ),
-      viewMarks<Gift[]>(network, "get_gifts_received", { account_id: account }).catch(
-        () => [] as Gift[],
-      ),
+      viewMarks<Gift[]>(network, "get_gifts_sent", {
+        account_id: account,
+      }).catch(() => [] as Gift[]),
+      viewMarks<Gift[]>(network, "get_gifts_received", {
+        account_id: account,
+      }).catch(() => [] as Gift[]),
     ]).then(([perps, calls, sent, received]) => {
       if (cancelled) return;
       setBook({
@@ -97,7 +98,10 @@ export function PortfolioDesk({
   if (!account) {
     return (
       <div className="panel space-y-3 p-6">
-        <p>Sign in to see your positions, shares, loans, calls and gifts in one place.</p>
+        <p>
+          Sign in to see your positions, shares, loans, calls and gifts in one
+          place.
+        </p>
         <button type="button" className="btn-gold" onClick={openDialog}>
           Sign in
         </button>
@@ -123,8 +127,12 @@ export function PortfolioDesk({
   );
   const debt =
     holdings.reduce((sum, row) => sum + row.debt, ZERO) +
-    (book?.perps ?? []).reduce((sum, row) => sum + BigInt(row.trader.debt ?? "0"), ZERO);
-  const total = BigInt(wallet.usdc) + BigInt(wallet.balance) + shareValue + perpEquity;
+    (book?.perps ?? []).reduce(
+      (sum, row) => sum + BigInt(row.trader.debt ?? "0"),
+      ZERO,
+    );
+  const total =
+    BigInt(wallet.usdc) + BigInt(wallet.balance) + shareValue + perpEquity;
 
   return (
     <div className="space-y-6">
@@ -135,13 +143,21 @@ export function PortfolioDesk({
           value={money(total)}
           hint="Wallet, Marks balance, shares and perp equity"
         />
-        <Stat label="Shares" value={money(shareValue)} hint={`${holdings.length} assets`} />
+        <Stat
+          label="Shares"
+          value={money(shareValue)}
+          hint={`${holdings.length} assets`}
+        />
         <Stat
           label="Perp equity"
           value={money(perpEquity)}
           hint={`${book?.perps.length ?? 0} markets`}
         />
-        <Stat label="Owed to the pool" value={money(debt)} hint="Perp and share loans" />
+        <Stat
+          label="Owed to the pool"
+          value={money(debt)}
+          hint="Perp and share loans"
+        />
       </div>
 
       <Section
@@ -151,24 +167,42 @@ export function PortfolioDesk({
         rows={book?.perps.length ?? null}
       >
         {book?.perps.map(({ market, trader }) => (
-          <tr key={market.symbol} className="border-b border-line last:border-0">
+          <tr
+            key={market.symbol}
+            className="border-b border-line last:border-0"
+          >
             <td className="px-4 py-3">
-              <Link className="font-semibold hover:text-gold" href={`/markets/${market.symbol}`}>
+              <Link
+                className="font-semibold hover:text-gold"
+                href={`/markets/${market.symbol}`}
+              >
                 {market.symbol}
               </Link>
               {trader.gift_id !== null && trader.gift_id !== undefined ? (
-                <span className="ml-2 text-xs text-gold">in gift {trader.gift_id}</span>
+                <span className="ml-2 text-xs text-gold">
+                  in gift {trader.gift_id}
+                </span>
               ) : null}
             </td>
             <td className="px-4 py-3 font-mono">
-              {trader.base_lots > 0 ? "Long" : trader.base_lots < 0 ? "Short" : "Flat"}{" "}
+              {trader.base_lots > 0
+                ? "Long"
+                : trader.base_lots < 0
+                  ? "Short"
+                  : "Flat"}{" "}
               {grouped(Math.abs(trader.base_lots))}
             </td>
-            <td className="px-4 py-3 font-mono">{money(trader.equity ?? trader.collateral)}</td>
-            <td className="px-4 py-3 font-mono">{money(trader.unrealized_pnl ?? "0")}</td>
+            <td className="px-4 py-3 font-mono">
+              {money(trader.equity ?? trader.collateral)}
+            </td>
+            <td className="px-4 py-3 font-mono">
+              {money(trader.unrealized_pnl ?? "0")}
+            </td>
             <td className="px-4 py-3 font-mono">{money(trader.debt ?? "0")}</td>
             <td className="px-4 py-3 font-mono">
-              {trader.liquidation_quote_per_lot ? money(trader.liquidation_quote_per_lot) : "None"}
+              {trader.liquidation_quote_per_lot
+                ? money(trader.liquidation_quote_per_lot)
+                : "None"}
             </td>
           </tr>
         ))}
@@ -182,8 +216,13 @@ export function PortfolioDesk({
         head={["Asset", "Free", "Locked", "Value", "Loan", ""]}
       >
         {holdings.map(({ share, free, locked, debt: owed }) => (
-          <tr key={share.asset_id} className="border-b border-line last:border-0">
-            <td className="px-4 py-3 font-semibold">{shareTicker(share.asset_id)}</td>
+          <tr
+            key={share.asset_id}
+            className="border-b border-line last:border-0"
+          >
+            <td className="px-4 py-3 font-semibold">
+              {shareTicker(share.asset_id)}
+            </td>
             <td className="px-4 py-3 font-mono">{units(free)}</td>
             <td className="px-4 py-3 font-mono">{units(locked)}</td>
             <td className="px-4 py-3 font-mono">
@@ -215,7 +254,9 @@ export function PortfolioDesk({
             <td className="px-4 py-3 font-mono">{position.long}</td>
             <td className="px-4 py-3 font-mono">{position.short}</td>
             <td className="px-4 py-3">
-              {item.settle_price ? `Settled at ${money(item.settle_price)}` : "Open"}
+              {item.settle_price
+                ? `Settled at ${money(item.settle_price)}`
+                : "Open"}
             </td>
             <td />
             <td />
