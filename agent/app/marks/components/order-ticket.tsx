@@ -1,7 +1,9 @@
-"use client";
-
-import { useToast } from "@/components/toast";
-import { marginShortfall } from "@/lib/cover";
+import { useToast } from "@/marks/components/toast";
+import {
+  TICKET_FILL,
+  takePendingFill,
+  type TicketFill,
+} from "@/marks/lib/agent-events";
 import {
   dollars,
   grouped,
@@ -9,13 +11,12 @@ import {
   money,
   sizedOrder,
   ticksFromDollars,
-} from "@/lib/format";
-import { contractSize } from "@/lib/markets";
-import { HEAVY_GAS, ORACLE_FEE, useNear, type ContractCall } from "@/lib/near";
-import type { Network } from "@/lib/network";
-import type { Market } from "@/lib/rpc";
-import { viewClient, type Trader } from "@/lib/rpc-client";
-import { explorerTx } from "@/lib/v2";
+} from "@/marks/lib/format";
+import { contractSize } from "@/marks/lib/markets";
+import { useNear } from "@/marks/lib/near";
+import type { OrderKind } from "@/marks/lib/order-plan";
+import { placeOrder } from "@/marks/lib/place-order";
+import { explorerTx } from "@/marks/lib/v2";
 import { useEffect, useId, useRef, useState } from "react";
 
 const control =
@@ -28,7 +29,6 @@ export function OrderTicket({
   price,
   side,
   maintenanceBps,
-  initialMarginBps,
   onPrice,
   onSide,
 }: {
@@ -38,7 +38,6 @@ export function OrderTicket({
   price: string;
   side: "bid" | "ask";
   maintenanceBps: number;
-  initialMarginBps: number;
   onPrice: (value: string) => void;
   onSide: (side: "bid" | "ask") => void;
 }) {
@@ -58,10 +57,16 @@ export function OrderTicket({
   const long = side === "bid";
   const ticks = ticksFromDollars(priceText, tickSize);
   const sized = ticks ? sizedOrder(amount, ticks, tickSize) : null;
-  const entry = sized && sized.lots > BigInt(0) ? sized.cost / sized.lots : null;
+  const entry =
+    sized && sized.lots > BigInt(0) ? sized.cost / sized.lots : null;
   const liquidation =
     sized && entry
-      ? liquidationPrice(sized.margin, long ? sized.lots : -sized.lots, entry, maintenanceBps)
+      ? liquidationPrice(
+          sized.margin,
+          long ? sized.lots : -sized.lots,
+          entry,
+          maintenanceBps,
+        )
       : null;
   const unit = contractSize(symbol);
 
@@ -71,9 +76,33 @@ export function OrderTicket({
     setPriceText(shownPrice(price, tickSize));
   }, [price, tickSize]);
 
+  useEffect(() => {
+    const apply = (next: TicketFill) => {
+      takePendingFill(symbol);
+      onSide(next.side);
+      if (next.kind) setKind(next.kind);
+      if (next.price) setPriceText(next.price);
+      if (next.amount) setAmount(next.amount);
+      setPriceError("");
+      setAmountError("");
+    };
+    const waiting = takePendingFill(symbol);
+    if (waiting) apply(waiting);
+    const fill = (event: Event) => {
+      const next = (event as CustomEvent<TicketFill>).detail;
+      if (next.symbol === symbol) apply(next);
+    };
+    window.addEventListener(TICKET_FILL, fill);
+    return () => window.removeEventListener(TICKET_FILL, fill);
+  }, [symbol, onSide]);
+
   return (
     <section className="rounded-lg border border-border bg-card p-4 md:min-h-full">
-      <div className="grid grid-cols-3 gap-2 text-sm" role="tablist" aria-label="Order kind">
+      <div
+        className="grid grid-cols-3 gap-2 text-sm"
+        role="tablist"
+        aria-label="Order kind"
+      >
         {(
           [
             ["limit", "Limit"],
@@ -119,7 +148,9 @@ export function OrderTicket({
         onSubmit={(event) => {
           event.preventDefault();
           const nextTicks = ticksFromDollars(priceText, tickSize);
-          const nextSized = nextTicks ? sizedOrder(amount, nextTicks, tickSize) : null;
+          const nextSized = nextTicks
+            ? sizedOrder(amount, nextTicks, tickSize)
+            : null;
           const nextPrice = nextTicks ? "" : "Enter a price.";
           const nextAmount =
             nextSized && nextSized.lots > BigInt(0)
@@ -133,14 +164,16 @@ export function OrderTicket({
             return;
           }
           setBusy(true);
-          void place(account, {
-            symbol,
-            side,
-            kind,
-            ticks: nextTicks,
-            lots: nextSized.lots,
-            initialMarginBps,
+          void placeOrder({
+            account,
             network,
+            intent: {
+              symbol,
+              side,
+              kind: kind as OrderKind,
+              ticks: nextTicks,
+              lots: nextSized.lots,
+            },
             send,
             sendMany,
             onRefresh: () =>
@@ -148,7 +181,7 @@ export function OrderTicket({
                 "This price is over an hour old. Approve the refresh, then approve the order.",
               ),
           })
-            .then((tx) => {
+            .then(({ tx }) => {
               window.dispatchEvent(new Event("marks-traded"));
               if (tx) {
                 toast.success("Order placed.", {
@@ -158,7 +191,9 @@ export function OrderTicket({
               } else toast.success("Order placed.");
             })
             .catch((caught) =>
-              toast.error(caught instanceof Error ? caught.message : "The order failed"),
+              toast.error(
+                caught instanceof Error ? caught.message : "The order failed",
+              ),
             )
             .finally(() => setBusy(false));
         }}
@@ -188,7 +223,9 @@ export function OrderTicket({
             }}
           />
           <p className="mt-1 text-xs text-muted-foreground">
-            {unit ? `USDC per contract. 1 contract = ${unit}.` : "USDC per contract."}
+            {unit
+              ? `USDC per contract. 1 contract = ${unit}.`
+              : "USDC per contract."}
           </p>
           {priceError ? (
             <p id={priceErrorId} className="mt-1 text-sm text-destructive">
@@ -238,7 +275,13 @@ export function OrderTicket({
           aria-busy={busy}
           className={`h-11 w-full rounded-md text-sm font-medium focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card disabled:opacity-50 ${long ? "bg-bid text-bid-foreground" : "bg-ask text-ask-foreground"}`}
         >
-          {busy ? "Submitting" : account ? (long ? "Buy / Long" : "Sell / Short") : "Sign in"}
+          {busy
+            ? "Submitting"
+            : account
+              ? long
+                ? "Buy / Long"
+                : "Sell / Short"
+              : "Sign in"}
         </button>
       </form>
     </section>
@@ -246,107 +289,7 @@ export function OrderTicket({
 }
 
 function shownPrice(ticks: string, tickSize: string) {
-  return /^\d+$/.test(ticks) && ticks !== "0" ? dollars(Number(ticks), tickSize) : "";
-}
-
-const PLACE_GAS = "100000000000000";
-/** Inside the contract's one-hour window, so a trade refreshes before the chain rejects it. */
-const STALE_AFTER_NS = BigInt("3000000000000");
-
-async function freshMark(
-  network: Network,
-  symbol: string,
-  send: (
-    methodName: string,
-    args: object,
-    options?: { gas?: string; deposit?: string },
-  ) => Promise<string>,
-  onRefresh: () => void,
-) {
-  const market = await viewClient<Market>(network, "get_market", { symbol });
-  const updated = BigInt(market.mark_updated_ns || "0");
-  const now = BigInt(Date.now()) * BigInt(1_000_000);
-  if (market.mark_ticks > 0 && now - updated <= STALE_AFTER_NS) {
-    return { markTicks: market.mark_ticks, tickSize: market.tick_size };
-  }
-  onRefresh();
-  await send("refresh_mark", { symbol }, { deposit: ORACLE_FEE, gas: HEAVY_GAS });
-  const started = Date.now();
-  while (Date.now() - started < 20_000) {
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-    const next = await viewClient<Market>(network, "get_market", { symbol }).catch(() => null);
-    if (next && BigInt(next.mark_updated_ns || "0") > updated && next.mark_ticks > 0) {
-      return { markTicks: next.mark_ticks, tickSize: next.tick_size };
-    }
-  }
-  throw new Error(
-    "The price feed did not update. Approve the refresh again, then place the order.",
-  );
-}
-
-async function place(
-  account: string,
-  input: {
-    symbol: string;
-    side: "bid" | "ask";
-    kind: string;
-    ticks: bigint;
-    lots: bigint;
-    initialMarginBps: number;
-    network: Network;
-    send: (
-      methodName: string,
-      args: object,
-      options?: { gas?: string; deposit?: string },
-    ) => Promise<string>;
-    sendMany: (calls: ContractCall[]) => Promise<string>;
-    onRefresh: () => void;
-  },
-) {
-  const mark = await freshMark(input.network, input.symbol, input.send, input.onRefresh);
-  let trader: Trader;
-  try {
-    trader = await viewClient<Trader>(input.network, "get_trader", {
-      symbol: input.symbol,
-      account_id: account,
-    });
-  } catch {
-    throw new Error("Could not read the margin on this market.");
-  }
-  const tick = BigInt(mark.tickSize);
-  const need = marginShortfall({
-    collateral: BigInt(trader.collateral || "0"),
-    debt: BigInt(trader.debt || "0"),
-    baseLots: BigInt(trader.base_lots || 0),
-    entryQuote: BigInt(trader.entry_quote_per_lot || "0"),
-    openBidLots: BigInt(trader.open_bid_lots || 0),
-    openAskLots: BigInt(trader.open_ask_lots || 0),
-    side: input.side,
-    lots: input.lots,
-    orderQuote: input.ticks * tick,
-    markQuote: BigInt(mark.markTicks) * tick,
-    initialBps: input.initialMarginBps,
-  });
-  const balance = BigInt(trader.unallocated || "0");
-  if (need > balance) {
-    throw new Error(
-      `This order needs ${money(need)} of margin and your Marks balance has ${money(balance)}.`,
-    );
-  }
-  const order: ContractCall = {
-    methodName: "place_order",
-    args: {
-      symbol: input.symbol,
-      side: input.side,
-      kind: input.kind,
-      ticks: Number(input.ticks),
-      lots: Number(input.lots),
-    },
-    gas: PLACE_GAS,
-  };
-  if (need === BigInt(0)) return input.sendMany([order]);
-  return input.sendMany([
-    { methodName: "commit", args: { symbol: input.symbol, amount: need.toString() } },
-    order,
-  ]);
+  return /^\d+$/.test(ticks) && ticks !== "0"
+    ? dollars(Number(ticks), tickSize)
+    : "";
 }
