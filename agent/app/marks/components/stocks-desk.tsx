@@ -1,9 +1,15 @@
-"use client";
-
-import { BalanceStrip, Row, Tabs, TxNote } from "@/components/v2-ui";
-import { atomsFromDollars, grouped, money } from "@/lib/format";
-import { HEAVY_GAS, ORACLE_FEE, useNear } from "@/lib/near";
-import { useAction, useClock, useWallet } from "@/lib/use-v2";
+import { BalanceStrip, Row, Tabs, TxNote } from "@/marks/components/v2-ui";
+import { atomsFromDollars, grouped, money } from "@/marks/lib/format";
+import {
+  buyShares,
+  claimSettlement,
+  placeOption,
+  refreshShare,
+  sellShares,
+  settleSeries,
+} from "@/marks/lib/desk-writes";
+import { useNear } from "@/marks/lib/near";
+import { useAction, useClock, useWallet } from "@/marks/lib/use-v2";
 import {
   UNIT,
   dollarsShort,
@@ -20,14 +26,20 @@ import {
   type OptionPosition,
   type Series,
   type Share,
-} from "@/lib/v2";
-import Link from "next/link";
-import { useRouter } from "next/navigation";
+} from "@/marks/lib/v2";
+import Link from "@/marks/components/link";
+import { useRouter } from "@/marks/lib/navigation";
 import { useEffect, useId, useMemo, useState } from "react";
 
 type Mode = "buy" | "sell" | "calls";
 
-export function StocksDesk({ shares, series }: { shares: Share[]; series: Series[] }) {
+export function StocksDesk({
+  shares,
+  series,
+}: {
+  shares: Share[];
+  series: Series[];
+}) {
   const [selected, setSelected] = useState(shares[0]?.asset_id ?? "");
   const [mode, setMode] = useState<Mode>("buy");
   const { wallet, loading, refresh } = useWallet();
@@ -63,7 +75,9 @@ export function StocksDesk({ shares, series }: { shares: Share[]; series: Series
                     <span className="font-display text-2xl font-semibold">
                       {shareTicker(item.asset_id)}
                     </span>
-                    <span className="font-mono text-lg">{money(item.price)}</span>
+                    <span className="font-mono text-lg">
+                      {money(item.price)}
+                    </span>
                   </span>
                   <span className="mt-1 flex items-center justify-between gap-3 text-xs text-ink-muted">
                     <span className="truncate">
@@ -73,7 +87,8 @@ export function StocksDesk({ shares, series }: { shares: Share[]; series: Series
                   </span>
                   {held ? (
                     <span className="mt-3 block text-sm">
-                      You hold <span className="font-mono">{units(held)}</span>, worth{" "}
+                      You hold <span className="font-mono">{units(held)}</span>,
+                      worth{" "}
                       <span className="font-mono">
                         {money(valueOf(BigInt(held), BigInt(item.price)))}
                       </span>
@@ -89,9 +104,12 @@ export function StocksDesk({ shares, series }: { shares: Share[]; series: Series
           <aside className="panel h-fit space-y-5 p-5 lg:sticky lg:top-24">
             <header>
               <p className="label-mono">{share.name}</p>
-              <p className="mt-1 font-display text-4xl font-semibold">{money(share.price)}</p>
+              <p className="mt-1 font-display text-4xl font-semibold">
+                {money(share.price)}
+              </p>
               <p className="text-xs text-ink-muted">
-                per {shareSize(share.asset_id)} · <Updated ns={share.updated_ns} />
+                per {shareSize(share.asset_id)} ·{" "}
+                <Updated ns={share.updated_ns} />
               </p>
             </header>
             <Tabs
@@ -122,7 +140,9 @@ export function StocksDesk({ shares, series }: { shares: Share[]; series: Series
               <Calls
                 key={share.asset_id}
                 share={share}
-                series={series.filter((item) => item.asset_id === share.asset_id)}
+                series={series.filter(
+                  (item) => item.asset_id === share.asset_id,
+                )}
                 onDone={after}
               />
             )}
@@ -131,7 +151,8 @@ export function StocksDesk({ shares, series }: { shares: Share[]; series: Series
                 href={`/borrow?asset=${share.asset_id}`}
                 className="gold-link block text-sm text-gold underline-offset-4 hover:underline"
               >
-                Borrow against your {shareTicker(share.asset_id)} without selling it
+                Borrow against your {shareTicker(share.asset_id)} without
+                selling it
               </Link>
             ) : null}
           </aside>
@@ -144,28 +165,42 @@ export function StocksDesk({ shares, series }: { shares: Share[]; series: Series
 function Updated({ ns }: { ns: number }) {
   const now = useClock();
   if (!ns) return <>never updated</>;
-  return <>updated {now === null ? "" : new Date(ns / 1_000_000).toLocaleTimeString()}</>;
+  return (
+    <>
+      updated{" "}
+      {now === null ? "" : new Date(ns / 1_000_000).toLocaleTimeString()}
+    </>
+  );
 }
 
 function Freshness({ share }: { share: Share }) {
   const now = useClock();
-  if (now === null) return <span className="shrink-0 font-mono text-ink-muted">…</span>;
+  if (now === null)
+    return <span className="shrink-0 font-mono text-ink-muted">…</span>;
   const fresh = isFresh(share, now);
   return (
-    <span className={`shrink-0 font-mono ${fresh ? "text-ok" : "text-pending"}`}>
+    <span
+      className={`shrink-0 font-mono ${fresh ? "text-ok" : "text-pending"}`}
+    >
       {fresh ? "LIVE" : "STALE"}
     </span>
   );
 }
 
-export function RefreshPrice({ share, onDone }: { share: Share; onDone: () => void }) {
-  const { send } = useNear();
+export function RefreshPrice({
+  share,
+  onDone,
+}: {
+  share: Share;
+  onDone: () => void;
+}) {
+  const { network, send } = useNear();
   const { busy, hash, error, pulse, run } = useAction();
   return (
     <div className="space-y-2 rounded-lg border border-line p-3">
       <p className="text-sm text-ink-muted">
-        Buying needs a price from the last hour. A refresh asks the oracle for a new print and costs
-        0.02 NEAR.
+        Buying needs a price from the last hour. A refresh asks the oracle for a
+        new print and costs 0.02 NEAR.
       </p>
       <button
         type="button"
@@ -173,11 +208,7 @@ export function RefreshPrice({ share, onDone }: { share: Share; onDone: () => vo
         disabled={Boolean(busy)}
         onClick={() =>
           void run("refresh", () =>
-            send(
-              "refresh_share",
-              { asset_id: share.asset_id },
-              { deposit: ORACLE_FEE, gas: HEAVY_GAS },
-            ),
+            refreshShare(send, share.asset_id, network),
           ).then((next) => {
             if (next !== null) onDone();
           })
@@ -205,9 +236,11 @@ function BuyShares({
   const id = useId();
   const atoms = atomsFromDollars(amount);
   const price = BigInt(share.price);
-  const estimate = atoms && price > BigInt(0) ? (atoms * UNIT) / price : BigInt(0);
+  const estimate =
+    atoms && price > BigInt(0) ? (atoms * UNIT) / price : BigInt(0);
   const now = useClock();
-  if (now !== null && !isFresh(share, now)) return <RefreshPrice share={share} onDone={onDone} />;
+  if (now !== null && !isFresh(share, now))
+    return <RefreshPrice share={share} onDone={onDone} />;
   return (
     <form
       className="space-y-3"
@@ -217,16 +250,18 @@ function BuyShares({
         if (!atoms || estimate === BigInt(0))
           return setError("Enter the USDC to spend, such as 25.");
         if (atoms > BigInt(balance)) {
-          return setError("That is more than your Marks balance. Deposit from the faucet page.");
+          return setError(
+            "That is more than your Marks balance. Deposit from the faucet page.",
+          );
         }
-        void run("buy", () =>
-          send("buy_shares", { asset_id: share.asset_id, amount: atoms.toString() }),
-        ).then((next) => {
-          if (next !== null) {
-            setAmount("");
-            onDone();
-          }
-        });
+        void run("buy", () => buyShares(send, share.asset_id, atoms)).then(
+          (next) => {
+            if (next !== null) {
+              setAmount("");
+              onDone();
+            }
+          },
+        );
       }}
     >
       <label htmlFor={id} className="label-mono block">
@@ -242,19 +277,38 @@ function BuyShares({
         onChange={(event) => setAmount(event.target.value)}
       />
       <dl>
-        <Row label="You receive" value={`${units(estimate)} ${shareTicker(share.asset_id)}`} />
+        <Row
+          label="You receive"
+          value={`${units(estimate)} ${shareTicker(share.asset_id)}`}
+        />
         <Row label="Price" value={money(share.price)} />
         <Row label="Marks balance" value={money(balance)} />
       </dl>
-      <button type="submit" className="btn-gold w-full" disabled={Boolean(busy)}>
-        {busy ? "Buying" : account ? `Buy ${shareTicker(share.asset_id)}` : "Sign in to buy"}
+      <button
+        type="submit"
+        className="btn-gold w-full"
+        disabled={Boolean(busy)}
+      >
+        {busy
+          ? "Buying"
+          : account
+            ? `Buy ${shareTicker(share.asset_id)}`
+            : "Sign in to buy"}
       </button>
       <TxNote hash={hash} error={error} pulse={pulse} done="Bought." />
     </form>
   );
 }
 
-function SellShares({ share, held, onDone }: { share: Share; held: string; onDone: () => void }) {
+function SellShares({
+  share,
+  held,
+  onDone,
+}: {
+  share: Share;
+  held: string;
+  onDone: () => void;
+}) {
   const { account, openDialog, send } = useNear();
   const [amount, setAmount] = useState("");
   const { busy, hash, error, pulse, run, setError } = useAction();
@@ -267,16 +321,18 @@ function SellShares({ share, held, onDone }: { share: Share; held: string; onDon
       onSubmit={(event) => {
         event.preventDefault();
         if (!account) return openDialog();
-        if (!count || count === BigInt(0)) return setError("Enter the shares to sell.");
-        if (count > BigInt(held)) return setError("You hold fewer shares than that.");
-        void run("sell", () =>
-          send("sell_shares", { asset_id: share.asset_id, units: count.toString() }),
-        ).then((next) => {
-          if (next !== null) {
-            setAmount("");
-            onDone();
-          }
-        });
+        if (!count || count === BigInt(0))
+          return setError("Enter the shares to sell.");
+        if (count > BigInt(held))
+          return setError("You hold fewer shares than that.");
+        void run("sell", () => sellShares(send, share.asset_id, count)).then(
+          (next) => {
+            if (next !== null) {
+              setAmount("");
+              onDone();
+            }
+          },
+        );
       }}
     >
       <div className="flex items-baseline justify-between">
@@ -304,8 +360,16 @@ function SellShares({ share, held, onDone }: { share: Share; held: string; onDon
         <Row label="You receive" value={money(proceeds)} />
         <Row label="You hold" value={units(held)} />
       </dl>
-      <button type="submit" className="btn-gold w-full" disabled={Boolean(busy)}>
-        {busy ? "Selling" : account ? `Sell ${shareTicker(share.asset_id)}` : "Sign in to sell"}
+      <button
+        type="submit"
+        className="btn-gold w-full"
+        disabled={Boolean(busy)}
+      >
+        {busy
+          ? "Selling"
+          : account
+            ? `Sell ${shareTicker(share.asset_id)}`
+            : "Sign in to sell"}
       </button>
       <TxNote
         hash={hash}
@@ -317,11 +381,23 @@ function SellShares({ share, held, onDone }: { share: Share; held: string; onDon
   );
 }
 
-function Calls({ share, series, onDone }: { share: Share; series: Series[]; onDone: () => void }) {
+function Calls({
+  share,
+  series,
+  onDone,
+}: {
+  share: Share;
+  series: Series[];
+  onDone: () => void;
+}) {
   const [picked, setPicked] = useState(series[0]?.id ?? "");
   const chosen = series.find((item) => item.id === picked);
   if (series.length === 0) {
-    return <p className="text-sm text-ink-muted">No call series are listed on this asset yet.</p>;
+    return (
+      <p className="text-sm text-ink-muted">
+        No call series are listed on this asset yet.
+      </p>
+    );
   }
   return (
     <div className="space-y-4">
@@ -333,7 +409,9 @@ function Calls({ share, series, onDone }: { share: Share; series: Series[]; onDo
               aria-pressed={item.id === picked}
               onClick={() => setPicked(item.id)}
               className={`w-full rounded-lg border p-3 text-left text-sm transition-colors ${
-                item.id === picked ? "border-gold" : "border-line hover:border-ink-muted"
+                item.id === picked
+                  ? "border-gold"
+                  : "border-line hover:border-ink-muted"
               }`}
             >
               <span className="flex justify-between gap-2">
@@ -353,7 +431,14 @@ function Calls({ share, series, onDone }: { share: Share; series: Series[]; onDo
           </li>
         ))}
       </ul>
-      {chosen ? <CallTicket key={chosen.id} share={share} series={chosen} onDone={onDone} /> : null}
+      {chosen ? (
+        <CallTicket
+          key={chosen.id}
+          share={share}
+          series={chosen}
+          onDone={onDone}
+        />
+      ) : null}
     </div>
   );
 }
@@ -381,7 +466,10 @@ function CallTicket({
 
   useEffect(() => {
     let cancelled = false;
-    void viewMarks<OptionBook>(network, "get_option_book", { series_id: series.id, depth: 5 })
+    void viewMarks<OptionBook>(network, "get_option_book", {
+      series_id: series.id,
+      depth: 5,
+    })
       .then((next) => !cancelled && setBook(next))
       .catch(() => undefined);
     if (account) {
@@ -444,14 +532,16 @@ function CallTicket({
         event.preventDefault();
         if (!account) return openDialog();
         if (perPremium === BigInt(0) || perPremium > width) {
-          return setError(`Enter a premium between $0.01 and ${dollarsShort(width)}.`);
+          return setError(
+            `Enter a premium between $0.01 and ${dollarsShort(width)}.`,
+          );
         }
         if (count === BigInt(0)) return setError("Enter how many contracts.");
         void run("place", () =>
-          send("place_option", {
-            series_id: series.id,
+          placeOption(send, {
+            seriesId: series.id,
             side,
-            premium: perPremium.toString(),
+            premium: perPremium,
             lots: Number(count),
           }),
         ).then((next) => {
@@ -499,15 +589,21 @@ function CallTicket({
       {book ? (
         <p className="text-xs text-ink-muted">
           Best bid{" "}
-          {book.bids[0] ? `${money(book.bids[0].premium)} × ${grouped(book.bids[0].lots)}` : "none"}{" "}
+          {book.bids[0]
+            ? `${money(book.bids[0].premium)} × ${grouped(book.bids[0].lots)}`
+            : "none"}{" "}
           · best ask{" "}
-          {book.asks[0] ? `${money(book.asks[0].premium)} × ${grouped(book.asks[0].lots)}` : "none"}
+          {book.asks[0]
+            ? `${money(book.asks[0].premium)} × ${grouped(book.asks[0].lots)}`
+            : "none"}
         </p>
       ) : null}
       <dl className="rounded-lg border border-line px-3 py-2">
         <Row
           label="Expiry"
-          value={now === null ? "" : expiryDate(series.expiry_ns).toLocaleString()}
+          value={
+            now === null ? "" : expiryDate(series.expiry_ns).toLocaleString()
+          }
         />
         <Row
           label="Pays per contract"
@@ -529,10 +625,15 @@ function CallTicket({
       </p>
       {position && (position.long > 0 || position.short > 0) ? (
         <p className="text-sm">
-          You hold {position.long} long and {position.short} short in this series.
+          You hold {position.long} long and {position.short} short in this
+          series.
         </p>
       ) : null}
-      <button type="submit" className="btn-gold w-full" disabled={Boolean(busy)}>
+      <button
+        type="submit"
+        className="btn-gold w-full"
+        disabled={Boolean(busy)}
+      >
         {busy
           ? "Placing"
           : !account
@@ -588,8 +689,14 @@ function Settlement({
   return (
     <div className="space-y-3 border-t border-line pt-4">
       <dl>
-        <Row label="Expired" value={expiryDate(series.expiry_ns).toLocaleString()} />
-        <Row label="Settled at" value={settle === null ? "waiting" : money(settle)} />
+        <Row
+          label="Expired"
+          value={expiryDate(series.expiry_ns).toLocaleString()}
+        />
+        <Row
+          label="Settled at"
+          value={settle === null ? "waiting" : money(settle)}
+        />
         <Row
           label="Pays per contract"
           value={payout === null ? "after settlement" : money(payout)}
@@ -603,9 +710,9 @@ function Settlement({
           className="btn-line w-full"
           disabled={Boolean(busy)}
           onClick={() =>
-            void run("settle", () =>
-              send("settle_series", { series_id: series.id }, { gas: "100000000000000" }),
-            ).then((next) => next !== null && onDone())
+            void run("settle", () => settleSeries(send, series.id)).then(
+              (next) => next !== null && onDone(),
+            )
           }
         >
           {busy ? "Settling" : "Settle with the first print after expiry"}
@@ -616,7 +723,7 @@ function Settlement({
           className="btn-gold w-full"
           disabled={Boolean(busy)}
           onClick={() =>
-            void run("claim", () => send("claim_settlement", { series_id: series.id })).then(
+            void run("claim", () => claimSettlement(send, series.id)).then(
               (next) => next !== null && onDone(),
             )
           }
