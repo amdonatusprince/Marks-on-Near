@@ -503,6 +503,106 @@ fn a_claimed_position_moves_to_the_recipient() {
 }
 
 #[test]
+fn a_bill_paid_from_balance_moves_usdc_and_borrows_nothing() {
+    let mut marks = desk();
+    alice_long(&mut marks);
+    at("alice.testnet", 4);
+    marks.pay(account("shop.testnet"), U128(25 * USD), "balance".into());
+    assert_eq!(balance(&marks, "alice.testnet"), 65 * USD);
+    assert_eq!(balance(&marks, "shop.testnet"), 25 * USD);
+    assert_eq!(
+        marks
+            .get_trader("SOL-PERP".into(), account("alice.testnet"))
+            .debt,
+        U128(0)
+    );
+    assert_eq!(marks.get_balance(account("shop.testnet")), U128(25 * USD));
+}
+
+#[test]
+#[should_panic(expected = "insufficient balance")]
+fn a_bill_above_balance_is_refused_without_collateral() {
+    let mut marks = desk();
+    alice_long(&mut marks);
+    at("alice.testnet", 4);
+    marks.pay(account("shop.testnet"), U128(95 * USD), "balance".into());
+}
+
+#[test]
+#[should_panic(expected = "pay someone else")]
+fn a_bill_cannot_be_paid_to_yourself() {
+    let mut marks = desk();
+    deposit(&mut marks, "alice.testnet", 10 * USD, "");
+    at("alice.testnet", 4);
+    marks.pay(account("alice.testnet"), U128(USD), "balance".into());
+}
+
+#[test]
+fn a_bill_borrows_the_shortfall_against_a_perp() {
+    let mut marks = desk();
+    alice_long(&mut marks);
+    at("alice.testnet", 4);
+    marks.pay(
+        account("shop.testnet"),
+        U128(94 * USD),
+        "perp:SOL-PERP".into(),
+    );
+    assert_eq!(balance(&marks, "alice.testnet"), 0);
+    assert_eq!(balance(&marks, "shop.testnet"), 94 * USD);
+    assert_eq!(balance(&marks, "fees.testnet"), 40_000);
+    let alice = marks.get_trader("SOL-PERP".into(), account("alice.testnet"));
+    assert_eq!(alice.debt, U128(4_040_000));
+    assert_eq!(marks.get_pool().lent, U128(4_040_000));
+}
+
+#[test]
+#[should_panic(expected = "insufficient margin")]
+fn a_perp_that_cannot_cover_the_shortfall_refuses_the_bill() {
+    let mut marks = desk();
+    alice_long(&mut marks);
+    at("alice.testnet", 4);
+    marks.pay(
+        account("shop.testnet"),
+        U128(96 * USD),
+        "perp:SOL-PERP".into(),
+    );
+}
+
+#[test]
+fn a_bill_borrows_the_shortfall_against_shares() {
+    let mut marks = desk();
+    deposit(&mut marks, "alice.testnet", 250 * USD, "");
+    set_share(&mut marks, 200, 10);
+    at("alice.testnet", 11);
+    assert_eq!(marks.buy_shares("aapl".into(), U128(200 * USD)), U128(USD));
+    marks.pay(
+        account("shop.testnet"),
+        U128(100 * USD),
+        "share:aapl".into(),
+    );
+    assert_eq!(balance(&marks, "alice.testnet"), 0);
+    assert_eq!(balance(&marks, "shop.testnet"), 100 * USD);
+    let loan = marks.get_share_loan(account("alice.testnet"), "aapl".into());
+    assert_eq!(loan.debt, U128(50_500_000));
+    assert_eq!(loan.units, U128(505_000));
+    assert_eq!(
+        marks.get_holdings(account("alice.testnet")),
+        vec![("aapl".into(), U128(495_000))]
+    );
+}
+
+#[test]
+#[should_panic(expected = "not enough shares")]
+fn a_share_loan_above_half_the_value_refuses_the_bill() {
+    let mut marks = desk();
+    deposit(&mut marks, "alice.testnet", 50 * USD, "");
+    set_share(&mut marks, 200, 10);
+    at("alice.testnet", 11);
+    marks.buy_shares("aapl".into(), U128(40 * USD));
+    marks.pay(account("shop.testnet"), U128(30 * USD), "share:aapl".into());
+}
+
+#[test]
 fn liquidation_voids_a_position_gift() {
     let mut marks = desk();
     let (id, _) = gift_position(&mut marks);

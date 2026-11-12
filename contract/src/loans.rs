@@ -15,7 +15,7 @@ use near_sdk::serde_json::json;
 use near_sdk::{env, near, AccountId};
 
 use crate::balances::{emit, platform_fee};
-use crate::shares::{value_of, ShareLoan};
+use crate::shares::{value_of, ShareLoan, UNIT};
 use crate::{Marks, MarksExt};
 
 pub const SHARE_LTV_BPS: u128 = 5_000;
@@ -100,6 +100,49 @@ impl Marks {
             .and_then(|loans| loans.get(asset_id))
             .cloned()
             .unwrap_or_default()
+    }
+
+    /// Shares that must be locked so `debt` stays within 50 percent of value.
+    fn units_for_debt(&self, debt: u128, price: u128) -> u128 {
+        let cover = debt
+            .checked_mul(10_000)
+            .unwrap_or_else(|| env::panic_str("overflow"))
+            .div_ceil(SHARE_LTV_BPS);
+        cover
+            .checked_mul(UNIT)
+            .unwrap_or_else(|| env::panic_str("overflow"))
+            .div_ceil(price)
+    }
+
+    /// Borrow only the part of a bill the balance does not cover.
+    fn fund_shortfall(&mut self, shortfall: u128, source: &str) {
+        if let Some(symbol) = source.strip_prefix("perp:") {
+            if symbol.is_empty() {
+                env::panic_str("unknown payment source");
+            }
+            self.borrow(symbol.to_string(), U128(shortfall));
+            return;
+        }
+        if let Some(asset_id) = source.strip_prefix("share:") {
+            if asset_id.is_empty() {
+                env::panic_str("unknown payment source");
+            }
+            let borrower = env::predecessor_account_id();
+            let price = self.shares.fresh_price(asset_id, env::block_timestamp());
+            let loan = self.share_loan(&borrower, asset_id);
+            let debt = loan.debt.0 + shortfall + platform_fee(shortfall);
+            let need = self.units_for_debt(debt, price);
+            let extra = need.saturating_sub(loan.units.0);
+            if extra > self.shares.held(&borrower, asset_id) {
+                env::panic_str("not enough shares");
+            }
+            self.borrow_against(asset_id.to_string(), U128(extra), U128(shortfall));
+            return;
+        }
+        if source == "balance" {
+            env::panic_str("insufficient balance");
+        }
+        env::panic_str("unknown payment source");
     }
 
     fn put_share_loan(&mut self, account: &AccountId, asset_id: &str, loan: ShareLoan) {
@@ -264,5 +307,40 @@ impl Marks {
 
     pub fn get_fee_account(&self) -> AccountId {
         self.fee_account.clone()
+    }
+
+    pub fn get_balance(&self, account_id: AccountId) -> U128 {
+        U128(self.balance_of(&account_id))
+    }
+
+    /// Pay `merchant` from the Marks balance. A shortfall is borrowed in this
+    /// same call. `source` is `balance`, `perp:SOL-PERP`, or `share:aapl`.
+    /// The 1 percent fee applies only to the borrowed part.
+    pub fn pay(&mut self, merchant: AccountId, amount: U128, source: String) -> U128 {
+        let payer = env::predecessor_account_id();
+        if amount.0 == 0 {
+            env::panic_str("size is zero");
+        }
+        if merchant == payer {
+            env::panic_str("pay someone else");
+        }
+        let have = self.balance_of(&payer);
+        let shortfall = amount.0.saturating_sub(have);
+        if shortfall > 0 {
+            self.fund_shortfall(shortfall, &source);
+        }
+        self.take_unallocated(&payer, amount.0);
+        self.credit_unallocated(&merchant, amount.0);
+        emit(
+            "bill_paid",
+            json!({
+                "account_id": payer,
+                "merchant": merchant,
+                "amount": amount.0.to_string(),
+                "borrowed": shortfall.to_string(),
+                "source": source,
+            }),
+        );
+        U128(amount.0)
     }
 }
