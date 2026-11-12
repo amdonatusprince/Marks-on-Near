@@ -1,11 +1,9 @@
-"use client";
-
-import { notifyOnce, useToast } from "@/components/toast";
-import { money } from "@/lib/format";
-import { useNear } from "@/lib/near";
-import type { Wallet } from "@/lib/use-v2";
-import { explorerTx } from "@/lib/v2";
-import Link from "next/link";
+import { notifyOnce, useToast } from "@/marks/components/toast";
+import { money } from "@/marks/lib/format";
+import { useNear } from "@/marks/lib/near";
+import type { Wallet } from "@/marks/lib/use-v2";
+import { explorerTx } from "@/marks/lib/v2";
+import Link from "@/marks/components/link";
 import { useEffect, useRef } from "react";
 
 /** Wallet mUSDC and the Marks balance. `topUp` links to the faucet; the faucet page hides it. */
@@ -54,7 +52,15 @@ export function BalanceStrip({
   );
 }
 
-export function Stat({ label, value, hint }: { label: string; value: string; hint?: string }) {
+export function Stat({
+  label,
+  value,
+  hint,
+}: {
+  label: string;
+  value: string;
+  hint?: string;
+}) {
   return (
     <div className="min-w-0">
       <p className="label-mono">{label}</p>
@@ -88,16 +94,30 @@ export function TxNote({
     seen.current = key;
     if (!notifyOnce(key)) return;
     if (error) toast.error(error);
-    else toast.success(done ?? "Done.", { href: explorerTx(hash), label: "View the transaction" });
+    else
+      toast.success(done ?? "Done.", {
+        href: explorerTx(hash),
+        label: "View the transaction",
+      });
   }, [hash, error, done, pulse, toast]);
   return null;
 }
 
-export function Row({ label, value, strong }: { label: string; value: string; strong?: boolean }) {
+export function Row({
+  label,
+  value,
+  strong,
+}: {
+  label: string;
+  value: string;
+  strong?: boolean;
+}) {
   return (
     <div className="flex items-baseline justify-between gap-4 py-1.5 text-sm">
       <dt className="text-ink-muted">{label}</dt>
-      <dd className={`text-right font-mono ${strong ? "text-gold" : ""}`}>{value}</dd>
+      <dd className={`text-right font-mono ${strong ? "text-gold" : ""}`}>
+        {value}
+      </dd>
     </div>
   );
 }
@@ -114,7 +134,11 @@ export function Tabs<T extends string>({
   label: string;
 }) {
   return (
-    <div role="tablist" aria-label={label} className="flex gap-1 rounded-lg border border-line p-1">
+    <div
+      role="tablist"
+      aria-label={label}
+      className="flex gap-1 rounded-lg border border-line p-1"
+    >
       {options.map(([id, text]) => (
         <button
           key={id}

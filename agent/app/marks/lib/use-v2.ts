@@ -1,9 +1,7 @@
-"use client";
-
-import { useNear } from "@/lib/near";
-import type { Network } from "@/lib/network";
-import type { Trader } from "@/lib/rpc";
-import { reason, viewMarks, viewToken, type ShareLoan } from "@/lib/v2";
+import { useNear } from "@/marks/lib/near";
+import type { Network } from "@/marks/lib/network";
+import type { Trader } from "@/marks/lib/rpc";
+import { reason, viewMarks, viewToken, type ShareLoan } from "@/marks/lib/v2";
 import { useCallback, useEffect, useState } from "react";
 
 let firstSymbol: Promise<string> | null = null;
@@ -19,7 +17,10 @@ async function anySymbol(network: Network) {
 export async function marksBalance(network: Network, account: string) {
   const symbol = await anySymbol(network);
   if (!symbol) return "0";
-  const trader = await viewMarks<Trader>(network, "get_trader", { symbol, account_id: account });
+  const trader = await viewMarks<Trader>(network, "get_trader", {
+    symbol,
+    account_id: account,
+  });
   return trader.unallocated;
 }
 
@@ -50,14 +51,16 @@ export function useWallet() {
     let cancelled = false;
     setLoading(true);
     void Promise.all([
-      viewToken<string>(network, "ft_balance_of", { account_id: account }).catch(() => "0"),
+      viewToken<string>(network, "ft_balance_of", {
+        account_id: account,
+      }).catch(() => "0"),
       marksBalance(network, account).catch(() => "0"),
-      viewMarks<[string, string][]>(network, "get_holdings", { account_id: account }).catch(
-        () => [] as [string, string][],
-      ),
-      viewMarks<[string, ShareLoan][]>(network, "get_share_loans", { account_id: account }).catch(
-        () => [] as [string, ShareLoan][],
-      ),
+      viewMarks<[string, string][]>(network, "get_holdings", {
+        account_id: account,
+      }).catch(() => [] as [string, string][]),
+      viewMarks<[string, ShareLoan][]>(network, "get_share_loans", {
+        account_id: account,
+      }).catch(() => [] as [string, ShareLoan][]),
     ])
       .then(([usdc, balance, holdings, loans]) => {
         if (cancelled) return;

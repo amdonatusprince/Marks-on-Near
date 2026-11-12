@@ -1,5 +1,10 @@
-import { grouped } from "@/lib/format";
-import { contractFor, rpcUrl, tokenFor, type Network } from "@/lib/network";
+import { grouped } from "@/marks/lib/format";
+import {
+  contractFor,
+  rpcUrl,
+  tokenFor,
+  type Network,
+} from "@/marks/lib/network";
 
 /** Shares carry six decimals: 1_000_000 units are one share. */
 export const UNIT = BigInt(1_000_000);
@@ -35,7 +40,12 @@ export type OptionLevel = { premium: string; lots: number };
 export type OptionBook = { bids: OptionLevel[]; asks: OptionLevel[] };
 export type OptionPosition = { long: number; short: number };
 export type ShareLoan = { units: string; debt: string };
-export type Pool = { cash: string; lent: string; fees: string; bad_debt: string };
+export type Pool = {
+  cash: string;
+  lent: string;
+  fees: string;
+  bad_debt: string;
+};
 
 export type GiftAsset =
   | { kind: "usdc"; amount: string }
@@ -75,14 +85,18 @@ export function shareTicker(assetId: string) {
 export function units(raw: string | bigint, digits = 4) {
   const value = typeof raw === "string" ? BigInt(raw) : raw;
   const whole = value / UNIT;
-  const frac = (value % UNIT).toString().padStart(6, "0").slice(0, digits).replace(/0+$/, "");
+  const frac = (value % UNIT)
+    .toString()
+    .padStart(6, "0")
+    .slice(0, digits)
+    .replace(/0+$/, "");
   return frac ? `${grouped(whole)}.${frac}` : grouped(whole);
 }
 
 export function unitsFromText(text: string): bigint | null {
   const trimmed = text.trim().replace(/[,\s]/g, "");
   if (!/^\d+(\.\d*)?$/.test(trimmed)) return null;
-  const [whole, frac = ""] = trimmed.split(".");
+  const [whole = "0", frac = ""] = trimmed.split(".");
   return BigInt(whole) * UNIT + BigInt(`${frac}000000`.slice(0, 6));
 }
 
@@ -95,7 +109,10 @@ export function fee(amount: bigint) {
   return (amount * FEE_BPS + BigInt(9_999)) / BigInt(10_000);
 }
 
-export function isFresh(share: Pick<Share, "updated_ns" | "stale_after_ns">, nowMs = Date.now()) {
+export function isFresh(
+  share: Pick<Share, "updated_ns" | "stale_after_ns">,
+  nowMs = Date.now(),
+) {
   if (!share.updated_ns) return false;
   const age = BigInt(nowMs) * BigInt(1_000_000) - BigInt(share.updated_ns);
   return age <= BigInt(share.stale_after_ns);
@@ -106,7 +123,10 @@ export function expiryDate(ns: string | number) {
 }
 
 export function shortDate(ns: string | number) {
-  return expiryDate(ns).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  return expiryDate(ns).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+  });
 }
 
 export function seriesTitle(series: Series) {
@@ -121,7 +141,12 @@ export function dollarsShort(atoms: string | bigint) {
   return frac === "00" ? `$${grouped(whole)}` : `$${grouped(whole)}.${frac}`;
 }
 
-async function query<T>(network: Network, account: string, method: string, args: object) {
+async function query<T>(
+  network: Network,
+  account: string,
+  method: string,
+  args: object,
+) {
   if (!account) throw new Error("The v2 contract is not configured");
   const response = await fetch(rpcUrl(network), {
     method: "POST",
@@ -152,11 +177,19 @@ async function query<T>(network: Network, account: string, method: string, args:
   return JSON.parse(new TextDecoder().decode(new Uint8Array(bytes))) as T;
 }
 
-export function viewMarks<T>(network: Network, method: string, args: object = {}) {
+export function viewMarks<T>(
+  network: Network,
+  method: string,
+  args: object = {},
+) {
   return query<T>(network, contractFor(network), method, args);
 }
 
-export function viewToken<T>(network: Network, method: string, args: object = {}) {
+export function viewToken<T>(
+  network: Network,
+  method: string,
+  args: object = {},
+) {
   return query<T>(network, tokenFor(network), method, args);
 }
 
@@ -171,7 +204,11 @@ export function reason(caught: unknown) {
   if (/does not exist on/i.test(plain) || /not a TTY/i.test(plain)) {
     return "Your testnet account is still being created. Wait a few seconds and try again.";
   }
-  if (/send_tx does not exist|Exceeded \d+ providers|Transaction has expired/i.test(plain)) {
+  if (
+    /send_tx does not exist|Exceeded \d+ providers|Transaction has expired|near_rpc_error/i.test(
+      plain,
+    )
+  ) {
     return "The wallet could not broadcast this transaction. Approve it again.";
   }
   const match =
