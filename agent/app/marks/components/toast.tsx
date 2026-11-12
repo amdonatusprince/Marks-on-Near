@@ -1,5 +1,3 @@
-"use client";
-
 import {
   createContext,
   useCallback,
@@ -17,8 +15,8 @@ type Item = {
   id: number;
   tone: Tone;
   title: string;
-  href?: string;
-  label?: string;
+  href?: string | undefined;
+  label?: string | undefined;
   leaving: boolean;
 };
 
@@ -59,12 +57,16 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     const timer = timers.current.get(id);
     if (timer) window.clearTimeout(timer);
     timers.current.delete(id);
-    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const reduce = window.matchMedia(
+      "(prefers-reduced-motion: reduce)",
+    ).matches;
     if (reduce) {
       setItems((list) => list.filter((item) => item.id !== id));
       return;
     }
-    setItems((list) => list.map((item) => (item.id === id ? { ...item, leaving: true } : item)));
+    setItems((list) =>
+      list.map((item) => (item.id === id ? { ...item, leaving: true } : item)),
+    );
     window.setTimeout(() => {
       setItems((list) => list.filter((item) => item.id !== id));
     }, 150);
@@ -92,9 +94,17 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     (tone: Tone, title: string, link?: Link) => {
       const id = ++seq.current;
       setItems((list) =>
-        [...list, { id, tone, title, href: link?.href, label: link?.label, leaving: false }].slice(
-          -4,
-        ),
+        [
+          ...list,
+          {
+            id,
+            tone,
+            title,
+            href: link?.href,
+            label: link?.label,
+            leaving: false,
+          },
+        ].slice(-4),
       );
       timers.current.set(
         id,
@@ -146,7 +156,12 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
               <p className="toast-kicker label-mono">{KICKER[item.tone]}</p>
               <p className="toast-title">{item.title}</p>
               {item.href ? (
-                <a className="toast-link" href={item.href} target="_blank" rel="noreferrer">
+                <a
+                  className="toast-link"
+                  href={item.href}
+                  target="_blank"
+                  rel="noreferrer"
+                >
                   {item.label ?? "View the transaction"}
                 </a>
               ) : null}
@@ -157,8 +172,17 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
               aria-label="Dismiss"
               onClick={() => dismiss(item.id)}
             >
-              <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
-                <path d="M2 2l8 8M10 2L2 10" stroke="currentColor" strokeWidth="1.5" />
+              <svg
+                width="12"
+                height="12"
+                viewBox="0 0 12 12"
+                aria-hidden="true"
+              >
+                <path
+                  d="M2 2l8 8M10 2L2 10"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                />
               </svg>
             </button>
           </article>

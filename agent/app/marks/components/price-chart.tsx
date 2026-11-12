@@ -1,8 +1,11 @@
-"use client";
-
-import { useNotify } from "@/components/toast";
-import { money } from "@/lib/format";
-import { SPAN_SECONDS, streamFor, type CandleBar, type CandleSpan } from "@/lib/ohlc";
+import { useNotify } from "@/marks/components/toast";
+import { money } from "@/marks/lib/format";
+import {
+  SPAN_SECONDS,
+  streamFor,
+  type CandleBar,
+  type CandleSpan,
+} from "@/marks/lib/ohlc";
 import {
   CandlestickSeries,
   ColorType,
@@ -26,7 +29,12 @@ const SPANS: { id: CandleSpan; label: string }[] = [
 const POLL_MS = 4_000;
 const VISIBLE_BARS = 120;
 
-type Quote = { open: string; close: string; move: "up" | "down" | null; tick: number };
+type Quote = {
+  open: string;
+  close: string;
+  move: "up" | "down" | null;
+  tick: number;
+};
 
 export function PriceChart({
   assetId,
@@ -57,7 +65,12 @@ export function PriceChart({
     setQuote((previous) => {
       if (!previous || previous.close === atoms) return previous;
       const move = BigInt(atoms) > BigInt(previous.close) ? "up" : "down";
-      return { open: previous.open, close: atoms, move, tick: previous.tick + 1 };
+      return {
+        open: previous.open,
+        close: atoms,
+        move,
+        tick: previous.tick + 1,
+      };
     });
   }, []);
 
@@ -121,7 +134,14 @@ export function PriceChart({
               high: Math.max(current.high, close),
               low: Math.min(current.low, close),
             }
-          : { time, open: current.close, high: close, low: close, close, volume: 0 },
+          : {
+              time,
+              open: current.close,
+              high: close,
+              low: close,
+              close,
+              volume: 0,
+            },
       );
       retick(close);
     },
@@ -134,7 +154,10 @@ export function PriceChart({
     const style = getComputedStyle(document.documentElement);
     const read = (name: string, fallback: string) =>
       style.getPropertyValue(name).trim() || fallback;
-    colors.current = { up: read("--ok", "#3fb8a6"), down: read("--error", "#c46a86") };
+    colors.current = {
+      up: read("--ok", "#3fb8a6"),
+      down: read("--error", "#c46a86"),
+    };
     const line = read("--line", "rgba(246,239,230,0.08)");
     const created = createChart(element, {
       autoSize: true,
@@ -150,10 +173,19 @@ export function PriceChart({
       },
       crosshair: {
         mode: CrosshairMode.Normal,
-        vertLine: { color: read("--gold", "#f2b13d"), labelBackgroundColor: "#2a1a1d" },
-        horzLine: { color: read("--gold", "#f2b13d"), labelBackgroundColor: "#2a1a1d" },
+        vertLine: {
+          color: read("--gold", "#f2b13d"),
+          labelBackgroundColor: "#2a1a1d",
+        },
+        horzLine: {
+          color: read("--gold", "#f2b13d"),
+          labelBackgroundColor: "#2a1a1d",
+        },
       },
-      rightPriceScale: { borderColor: line, scaleMargins: { top: 0.08, bottom: 0.24 } },
+      rightPriceScale: {
+        borderColor: line,
+        scaleMargins: { top: 0.08, bottom: 0.24 },
+      },
       timeScale: {
         borderColor: line,
         timeVisible: true,
@@ -177,7 +209,9 @@ export function PriceChart({
       lastValueVisible: false,
       priceLineVisible: false,
     });
-    volume.current.priceScale().applyOptions({ scaleMargins: { top: 0.82, bottom: 0 } });
+    volume.current
+      .priceScale()
+      .applyOptions({ scaleMargins: { top: 0.82, bottom: 0 } });
     chart.current = created;
     return () => {
       created.remove();
@@ -254,14 +288,20 @@ export function PriceChart({
         if (message.type !== "ticker" || !message.price) return;
         streaming.current = true;
         const at = message.time ? Date.parse(message.time) : Date.now();
-        pending = { close: Number(message.price) * stream.size, seconds: at / 1000 };
+        pending = {
+          close: Number(message.price) * stream.size,
+          seconds: at / 1000,
+        };
         if (!frame) frame = requestAnimationFrame(flush);
       };
       socket.onclose = () => {
         streaming.current = false;
         if (closed) return;
         retries += 1;
-        retryTimer = window.setTimeout(connect, Math.min(30_000, 1_000 * 2 ** retries));
+        retryTimer = window.setTimeout(
+          connect,
+          Math.min(30_000, 1_000 * 2 ** retries),
+        );
       };
     };
     connect();
@@ -284,7 +324,11 @@ export function PriceChart({
       setLabel(body.note);
       show(body.candles);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "The candles could not be loaded");
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : "The candles could not be loaded",
+      );
     } finally {
       setPending(false);
     }
@@ -293,9 +337,15 @@ export function PriceChart({
   const change = quote ? BigInt(quote.close) - BigInt(quote.open) : BigInt(0);
   const rose = change >= BigInt(0);
   const percent =
-    quote && BigInt(quote.open) > BigInt(0) ? (Number(change) / Number(quote.open)) * 100 : 0;
+    quote && BigInt(quote.open) > BigInt(0)
+      ? (Number(change) / Number(quote.open)) * 100
+      : 0;
   const flash =
-    quote?.move === "up" ? "marks-flash-up" : quote?.move === "down" ? "marks-flash-down" : "";
+    quote?.move === "up"
+      ? "marks-flash-up"
+      : quote?.move === "down"
+        ? "marks-flash-down"
+        : "";
 
   return (
     <section
@@ -338,7 +388,9 @@ export function PriceChart({
             </span>
           </p>
         ) : (
-          <p className="font-mono text-sm text-muted-foreground">Waiting for a print</p>
+          <p className="font-mono text-sm text-muted-foreground">
+            Waiting for a print
+          </p>
         )}
       </div>
       <div
@@ -356,14 +408,17 @@ export function PriceChart({
         />
         {empty ? (
           <p className="absolute inset-0 grid place-items-center px-4 text-center text-sm text-muted-foreground">
-            {label || "No prints yet. The feed writes a price, then the candles appear here."}
+            {label ||
+              "No prints yet. The feed writes a price, then the candles appear here."}
           </p>
         ) : null}
       </div>
       <p className="flex shrink-0 items-center justify-between gap-3 border-t border-border px-3 py-1.5 text-xs text-muted-foreground">
         <span>{label}</span>
         <span>
-          {streamFor(assetId) ? "Live trades from Coinbase" : `Live, every ${POLL_MS / 1000}s`}
+          {streamFor(assetId)
+            ? "Live trades from Coinbase"
+            : `Live, every ${POLL_MS / 1000}s`}
         </span>
       </p>
     </section>
@@ -396,7 +451,13 @@ function toRows(candles: CandleBar[]): Row[] {
 }
 
 function candleOf(row: Row) {
-  return { time: row.time, open: row.open, high: row.high, low: row.low, close: row.close };
+  return {
+    time: row.time,
+    open: row.open,
+    high: row.high,
+    low: row.low,
+    close: row.close,
+  };
 }
 
 function volumeBar(row: Row, colors: { up: string; down: string }) {
@@ -411,11 +472,15 @@ function dollars(atoms: string) {
 function withAlpha(hex: string, alpha: number) {
   const match = /^#?([0-9a-f]{6})$/i.exec(hex);
   if (!match) return hex;
-  const value = Number.parseInt(match[1], 16);
+  const value = Number.parseInt(match[1] ?? "", 16);
   return `rgba(${(value >> 16) & 255}, ${(value >> 8) & 255}, ${value & 255}, ${alpha})`;
 }
 
-function quoteOf(candles: CandleBar[], previous: Quote | null, tick: number): Quote | null {
+function quoteOf(
+  candles: CandleBar[],
+  previous: Quote | null,
+  tick: number,
+): Quote | null {
   const first = candles[0];
   const last = candles.at(-1);
   if (!first || !last) return null;
@@ -429,13 +494,22 @@ function quoteOf(candles: CandleBar[], previous: Quote | null, tick: number): Qu
   return { open, close: last.close, move, tick };
 }
 
-async function readCandles(assetId: string, span: CandleSpan, live: boolean, signal?: AbortSignal) {
+async function readCandles(
+  assetId: string,
+  span: CandleSpan,
+  live: boolean,
+  signal?: AbortSignal,
+) {
   const response = await fetch(
     `/api/candles?asset=${encodeURIComponent(assetId)}&span=${span}${live ? "&live=1" : ""}`,
-    { signal, cache: "no-store" },
+    { signal: signal ?? null, cache: "no-store" },
   );
   if (!response.ok) throw new Error("The candles could not be loaded");
-  const body = (await response.json()) as { candles?: CandleBar[]; note?: string };
-  if (!Array.isArray(body.candles)) throw new Error("The candles could not be loaded");
+  const body = (await response.json()) as {
+    candles?: CandleBar[];
+    note?: string;
+  };
+  if (!Array.isArray(body.candles))
+    throw new Error("The candles could not be loaded");
   return { candles: body.candles, note: body.note ?? "" };
 }
