@@ -1,14 +1,18 @@
-"use client";
-
-import { AccountPanel } from "@/components/account-panel";
-import { OrderBook } from "@/components/order-book";
-import { OrderTicket } from "@/components/order-ticket";
-import { PriceChart } from "@/components/price-chart";
-import { fundingWords, grouped, money, openInterest, price as priceOf } from "@/lib/format";
-import { contractSize } from "@/lib/markets";
-import type { CandleBar } from "@/lib/ohlc";
-import type { Book, Market } from "@/lib/rpc";
-import Link from "next/link";
+import { AccountPanel } from "@/marks/components/account-panel";
+import { OrderBook } from "@/marks/components/order-book";
+import { OrderTicket } from "@/marks/components/order-ticket";
+import { PriceChart } from "@/marks/components/price-chart";
+import {
+  fundingWords,
+  grouped,
+  money,
+  openInterest,
+  price as priceOf,
+} from "@/marks/lib/format";
+import { contractSize } from "@/marks/lib/markets";
+import type { CandleBar } from "@/marks/lib/ohlc";
+import type { Book, Market } from "@/marks/lib/rpc";
+import Link from "@/marks/components/link";
 import { useState } from "react";
 
 export function TradeDesk({
@@ -38,10 +42,14 @@ export function TradeDesk({
           >
             Markets
           </Link>
-          <h1 className="text-2xl font-semibold tracking-tight">{market.symbol}</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">
+            {market.symbol}
+          </h1>
           <p className="text-xs text-muted-foreground">
             {market.category}
-            {unit ? ` · 1 contract = ${unit}` : " · one contract is priced in USDC"}
+            {unit
+              ? ` · 1 contract = ${unit}`
+              : " · one contract is priced in USDC"}
           </p>
         </div>
         <div>
@@ -55,13 +63,19 @@ export function TradeDesk({
             <dt className="text-xs text-muted-foreground">Funding</dt>
             <dd>{fundingWords(fundingBps)}</dd>
             <dd className="text-xs text-muted-foreground">
-              {fundingBps === 0 ? "Mark matches the index." : "Settled each hour."}
+              {fundingBps === 0
+                ? "Mark matches the index."
+                : "Settled each hour."}
             </dd>
           </div>
           <div>
             <dt className="text-xs text-muted-foreground">Open interest</dt>
             <dd className="font-mono tabular-nums">
-              {openInterest(market.open_interest_lots, market.mark_ticks, market.tick_size)}
+              {openInterest(
+                market.open_interest_lots,
+                market.mark_ticks,
+                market.tick_size,
+              )}
             </dd>
             <dd className="text-xs text-muted-foreground">
               {grouped(market.open_interest_lots)}{" "}
@@ -70,12 +84,18 @@ export function TradeDesk({
           </div>
           <div>
             <dt className="text-xs text-muted-foreground">Traded</dt>
-            <dd className="font-mono tabular-nums">{money(market.volume_quote)}</dd>
+            <dd className="font-mono tabular-nums">
+              {money(market.volume_quote)}
+            </dd>
           </div>
         </dl>
       </header>
       <div className="desk-chart">
-        <PriceChart assetId={market.asset_id} candles={history} note={chartNote} />
+        <PriceChart
+          assetId={market.asset_id}
+          candles={history}
+          note={chartNote}
+        />
       </div>
       <div className="desk-book">
         <OrderBook
@@ -98,7 +118,6 @@ export function TradeDesk({
           price={price}
           side={side}
           maintenanceBps={market.maintenance_margin_bps}
-          initialMarginBps={market.initial_margin_bps}
           onPrice={setPrice}
           onSide={setSide}
         />
