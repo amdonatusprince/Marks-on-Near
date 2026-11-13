@@ -1,18 +1,25 @@
-"use client";
-
 // Layout, copy rhythm and styles follow Moi's send page (MIT): https://github.com/ramakrishnanhulk20/Moi.
-import { Certificate } from "@/components/marks/Certificate";
-import { useNotify } from "@/components/toast";
-import "@/components/marks/certificate.css";
-import "@/components/marks/send.css";
-import { RefreshPrice } from "@/components/stocks-desk";
-import { figures, grouped, money } from "@/lib/format";
-import { giftLink, newClaimKey, sealNote, MAX_NOTE_TEXT } from "@/lib/gift-key";
-import { holdSecret, linksOf, pendingOf, saveLink, storageWorks } from "@/lib/gift-vault";
-import { useNear } from "@/lib/near";
-import { contractFor } from "@/lib/network";
-import type { Market, Trader } from "@/lib/rpc";
-import { useClock, useWallet } from "@/lib/use-v2";
+import { Certificate } from "@/marks/components/marks/Certificate";
+import { useNotify } from "@/marks/components/toast";
+import "@/marks/components/marks/certificate.css";
+import "@/marks/components/marks/send.css";
+import { RefreshPrice } from "@/marks/components/stocks-desk";
+import { figures, grouped, money } from "@/marks/lib/format";
+import { submitGift } from "@/marks/lib/create-gift";
+import { cancelGift } from "@/marks/lib/desk-writes";
+import { giftLink, MAX_NOTE_TEXT } from "@/marks/lib/gift-key";
+import {
+  forgetLink,
+  linksOf,
+  pendingOf,
+  saveLink,
+  storageWorks,
+} from "@/marks/lib/gift-vault";
+import { publishGiftLinks, pullGiftLinks } from "@/marks/lib/gift-sync";
+import { useNear } from "@/marks/lib/near";
+import { contractFor } from "@/marks/lib/network";
+import type { Market, Trader } from "@/marks/lib/rpc";
+import { useClock, useWallet } from "@/marks/lib/use-v2";
 import {
   UNIT,
   fee,
@@ -28,17 +35,17 @@ import {
   type Gift,
   type GiftAsset,
   type Share,
-} from "@/lib/v2";
-import { Fraunces } from "next/font/google";
-import Link from "next/link";
-import { useCallback, useEffect, useId, useMemo, useState, type CSSProperties } from "react";
-
-const displayItalic = Fraunces({
-  subsets: ["latin"],
-  style: ["italic"],
-  axes: ["opsz", "SOFT", "WONK"],
-  display: "swap",
-});
+} from "@/marks/lib/v2";
+import { displayItalic } from "@/marks/lib/fonts";
+import Link from "@/marks/components/link";
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useState,
+  type CSSProperties,
+} from "react";
 
 type Kind = "shares" | "usdc" | "position";
 type Choice = "5" | "10" | "25" | "100" | "other";
@@ -52,18 +59,25 @@ type Run =
 const PRESETS: readonly Choice[] = ["5", "10", "25", "100"];
 const LIFETIMES: readonly Days[] = [7, 30, 90];
 const DRAWN = { "--hand": 1 } as CSSProperties;
-const GIFT_GAS = "100000000000000";
 const ZERO = BigInt(0);
 
 type Held = { market: Market; trader: Trader };
 
-export function SendPage({ shares, markets }: { shares: Share[]; markets: Market[] }) {
+export function SendPage({
+  shares,
+  markets,
+}: {
+  shares: Share[];
+  markets: Market[];
+}) {
   const { account, network, openDialog, send } = useNear();
   const contract = contractFor(network);
   const { wallet, loading, refresh } = useWallet();
   const [kind, setKind] = useState<Kind>("shares");
   const [asset, setAsset] = useState(
-    shares.find((share) => share.asset_id === "nvda")?.asset_id ?? shares[0]?.asset_id ?? "",
+    shares.find((share) => share.asset_id === "nvda")?.asset_id ??
+      shares[0]?.asset_id ??
+      "",
   );
   const [symbol, setSymbol] = useState("");
   const [choice, setChoice] = useState<Choice>("25");
@@ -81,7 +95,10 @@ export function SendPage({ shares, markets }: { shares: Share[]; markets: Market
     let cancelled = false;
     void Promise.all(
       markets.map((market) =>
-        viewMarks<Trader>(network, "get_trader", { symbol: market.symbol, account_id: account })
+        viewMarks<Trader>(network, "get_trader", {
+          symbol: market.symbol,
+          account_id: account,
+        })
           .then((trader) => ({ market, trader }))
           .catch(() => null),
       ),
@@ -89,7 +106,9 @@ export function SendPage({ shares, markets }: { shares: Share[]; markets: Market
       if (cancelled) return;
       const open = rows.filter(
         (row): row is Held =>
-          row !== null && row.trader.base_lots !== 0 && (row.trader.gift_id ?? null) === null,
+          row !== null &&
+          row.trader.base_lots !== 0 &&
+          (row.trader.gift_id ?? null) === null,
       );
       setPositions(open);
       setSymbol((current) =>
@@ -104,18 +123,27 @@ export function SendPage({ shares, markets }: { shares: Share[]; markets: Market
   }, [account, network, markets, kind, listTick]);
 
   const share = shares.find((item) => item.asset_id === asset) ?? null;
-  const position = positions.find((row) => row.market.symbol === symbol) ?? null;
-  const amountText = (choice === "other" ? otherText : choice).replace(/[$,\s]/g, "");
+  const position =
+    positions.find((row) => row.market.symbol === symbol) ?? null;
+  const amountText = (choice === "other" ? otherText : choice).replace(
+    /[$,\s]/g,
+    "",
+  );
   const amount = /^\d+(\.\d{0,2})?$/.test(amountText)
     ? BigInt(Math.round(Number(amountText) * 1e6))
     : ZERO;
   const price = share ? BigInt(share.price) : ZERO;
-  const giftUnits = kind === "shares" && price > ZERO ? (amount * UNIT) / price : ZERO;
+  const giftUnits =
+    kind === "shares" && price > ZERO ? (amount * UNIT) / price : ZERO;
   const held = BigInt(wallet.holdings[asset] ?? "0");
   const buyFirst = kind === "shares" && held < giftUnits;
   const equity = position ? BigInt(position.trader.equity ?? "0") : ZERO;
   const giftValue =
-    kind === "position" ? equity : kind === "shares" ? valueOf(giftUnits, price) : amount;
+    kind === "position"
+      ? equity
+      : kind === "shares"
+        ? valueOf(giftUnits, price)
+        : amount;
   const giftFee = fee(giftValue > ZERO ? giftValue : ZERO);
   const balance = BigInt(wallet.balance);
   const needs = (kind === "usdc" ? amount : buyFirst ? amount : ZERO) + giftFee;
@@ -129,7 +157,8 @@ export function SendPage({ shares, markets }: { shares: Share[]; markets: Market
       };
     }
     if (kind === "position") {
-      if (!position) return { figure: "0", holding: "CONTRACTS OF A PERP", worth: null };
+      if (!position)
+        return { figure: "0", holding: "CONTRACTS OF A PERP", worth: null };
       const lots = position.trader.base_lots;
       return {
         figure: grouped(Math.abs(lots)),
@@ -149,14 +178,16 @@ export function SendPage({ shares, markets }: { shares: Share[]; markets: Market
   const hint = (() => {
     if (!account) return "Sign in first.";
     if (kind === "shares" && !share) return "Pick a share.";
-    if (kind === "position" && !position) return "Open a perp position first, then send it here.";
+    if (kind === "position" && !position)
+      return "Open a perp position first, then send it here.";
     if (kind !== "position" && amount === ZERO) return "Choose an amount.";
     if (needs > balance)
       return `You need ${money(needs)} in your Marks balance. The faucet page tops it up.`;
     return null;
   })();
   const now = useClock();
-  const stale = kind === "shares" && share !== null && now !== null && !isFresh(share, now);
+  const stale =
+    kind === "shares" && share !== null && now !== null && !isFresh(share, now);
 
   const start = async () => {
     if (!account || !contract || hint) return;
@@ -169,54 +200,38 @@ export function SendPage({ shares, markets }: { shares: Share[]; markets: Market
       return;
     }
     try {
-      const claim = newClaimKey(contract, account);
-      holdSecret(contract, account, claim.claimKey, claim.secret);
-      setRun({ phase: "sending", step: "Sealing your note" });
-      const sealed = await sealNote(claim.secret, note);
       let giftAsset: GiftAsset;
       if (kind === "usdc") {
         giftAsset = { kind: "usdc", amount: amount.toString() };
       } else if (kind === "position") {
         giftAsset = { kind: "position", symbol };
       } else {
-        let unitsToGive = giftUnits;
-        if (buyFirst) {
-          setRun({ phase: "sending", step: `Buying ${shareTicker(asset)}` });
-          await send("buy_shares", { asset_id: asset, amount: amount.toString() });
-          const after = await viewMarks<[string, string][]>(network, "get_holdings", {
-            account_id: account,
-          });
-          const now = BigInt(Object.fromEntries(after)[asset] ?? "0");
-          unitsToGive = now < giftUnits ? now : giftUnits;
-        }
-        giftAsset = { kind: "shares", asset_id: asset, units: unitsToGive.toString() };
+        giftAsset = {
+          kind: "shares",
+          asset_id: asset,
+          units: giftUnits.toString(),
+        };
       }
-      setRun({ phase: "sending", step: "Locking the gift" });
-      const hash = await send(
-        "create_gift",
-        {
-          asset: giftAsset,
-          claim_key: claim.claimKey,
-          key_proof: claim.keyProof,
-          expiry_days: days,
-          note: sealed,
-        },
-        { gas: GIFT_GAS },
-      );
-      setRun({ phase: "sending", step: "Finding your gift" });
-      let gift: Gift | undefined;
-      for (let attempt = 0; attempt < 6 && !gift; attempt += 1) {
-        const sent = await viewMarks<Gift[]>(network, "get_gifts_sent", { account_id: account });
-        gift = sent.find((item) => item.claim_key === claim.claimKey);
-        if (!gift) await new Promise((resolve) => setTimeout(resolve, 1500));
-      }
-      if (!gift)
-        throw new Error(
-          "The gift was sent, but it is not listed yet. Reload this page in a minute.",
-        );
-      const link = giftLink(window.location.origin, gift.id, claim.secret);
-      saveLink(contract, account, claim.claimKey, gift.id, link);
-      setRun({ phase: "done", giftId: gift.id, link, hash });
+      const result = await submitGift({
+        account,
+        network,
+        contract,
+        origin: window.location.origin,
+        send,
+        asset: giftAsset,
+        days,
+        note,
+        buyShares: buyFirst
+          ? { asset_id: asset, amount: amount.toString() }
+          : null,
+        onStep: (step) => setRun({ phase: "sending", step }),
+      });
+      setRun({
+        phase: "done",
+        giftId: result.giftId,
+        link: result.link,
+        hash: result.tx,
+      });
       refresh();
       setListTick((value) => value + 1);
     } catch (caught) {
@@ -229,11 +244,15 @@ export function SendPage({ shares, markets }: { shares: Share[]; markets: Market
   return (
     <div
       className="send-page"
-      data-run={run.phase === "form" || run.phase === "error" ? "form" : run.phase}
+      data-run={
+        run.phase === "form" || run.phase === "error" ? "form" : run.phase
+      }
     >
       <div className="send-main mx-auto max-w-[1440px]">
         <header className="send-head">
-          <p className="send-label">SEND A GIFT · 1 PERCENT FEE · NO GAS FOR THEM</p>
+          <p className="send-label">
+            SEND A GIFT · 1 PERCENT FEE · NO GAS FOR THEM
+          </p>
           <h1 className="send-title">
             Send someone
             <br />
@@ -254,7 +273,9 @@ export function SendPage({ shares, markets }: { shares: Share[]; markets: Market
                   <p className="send-wallet">
                     <span>{account}</span>
                     <span className="send-wallet-dot">{" · "}</span>
-                    <span>{loading ? "…" : `${money(wallet.balance)} in Marks`}</span>
+                    <span>
+                      {loading ? "…" : `${money(wallet.balance)} in Marks`}
+                    </span>
                   </p>
                 ) : (
                   <>
@@ -266,7 +287,8 @@ export function SendPage({ shares, markets }: { shares: Share[]; markets: Market
                       Sign in to send
                     </button>
                     <p className="send-hint">
-                      Google or any NEAR wallet. Your friend needs neither until they open it.
+                      Google or any NEAR wallet. Your friend needs neither until
+                      they open it.
                     </p>
                   </>
                 )}
@@ -275,7 +297,11 @@ export function SendPage({ shares, markets }: { shares: Share[]; markets: Market
               <fieldset className="send-fields" disabled={locked}>
                 <div className="send-block">
                   <p className="send-label send-label-small">WHAT TO SEND</p>
-                  <div className="send-chips" role="group" aria-label="What to send">
+                  <div
+                    className="send-chips"
+                    role="group"
+                    aria-label="What to send"
+                  >
                     {(
                       [
                         ["shares", "A share"],
@@ -303,18 +329,27 @@ export function SendPage({ shares, markets }: { shares: Share[]; markets: Market
                         type="button"
                         key={item.asset_id}
                         className="send-tile"
-                        data-selected={item.asset_id === asset ? "true" : undefined}
+                        data-selected={
+                          item.asset_id === asset ? "true" : undefined
+                        }
                         aria-pressed={item.asset_id === asset}
                         onClick={() => setAsset(item.asset_id)}
                       >
-                        <span className="send-logo send-logo-blank" aria-hidden="true">
+                        <span
+                          className="send-logo send-logo-blank"
+                          aria-hidden="true"
+                        >
                           {item.name.slice(0, 1)}
                         </span>
                         <span className="send-tile-text">
                           <span className="send-tile-name">{item.name}</span>
-                          <span className="send-tile-symbol">{shareTicker(item.asset_id)}</span>
+                          <span className="send-tile-symbol">
+                            {shareTicker(item.asset_id)}
+                          </span>
                         </span>
-                        <span className="send-tile-price">{money(item.price)}</span>
+                        <span className="send-tile-price">
+                          {money(item.price)}
+                        </span>
                       </button>
                     ))}
                   </div>
@@ -324,37 +359,54 @@ export function SendPage({ shares, markets }: { shares: Share[]; markets: Market
                   account && positions.length === 0 ? (
                     <p className="send-note-text">
                       You have no open position to send. Open one on the{" "}
-                      <Link className="send-link send-link-small" href="/markets">
+                      <Link
+                        className="send-link send-link-small"
+                        href="/markets"
+                      >
                         perps desk
                       </Link>
                       .
                     </p>
                   ) : (
-                    <div className="send-grid" role="group" aria-label="Position">
+                    <div
+                      className="send-grid"
+                      role="group"
+                      aria-label="Position"
+                    >
                       {positions.map(({ market, trader }) => (
                         <button
                           type="button"
                           key={market.symbol}
                           className="send-tile"
-                          data-selected={market.symbol === symbol ? "true" : undefined}
+                          data-selected={
+                            market.symbol === symbol ? "true" : undefined
+                          }
                           aria-pressed={market.symbol === symbol}
                           onClick={() => setSymbol(market.symbol)}
                         >
                           <span className="send-tile-text">
-                            <span className="send-tile-name">{market.symbol}</span>
+                            <span className="send-tile-name">
+                              {market.symbol}
+                            </span>
                             <span className="send-tile-symbol">
                               {trader.base_lots > 0 ? "LONG" : "SHORT"}{" "}
                               {grouped(Math.abs(trader.base_lots))}
                             </span>
                           </span>
-                          <span className="send-tile-price">{money(trader.equity ?? "0")}</span>
+                          <span className="send-tile-price">
+                            {money(trader.equity ?? "0")}
+                          </span>
                         </button>
                       ))}
                     </div>
                   )
                 ) : (
                   <div className="send-block">
-                    <div className="send-chips" role="group" aria-label="Amount in US dollars">
+                    <div
+                      className="send-chips"
+                      role="group"
+                      aria-label="Amount in US dollars"
+                    >
                       {PRESETS.map((preset) => (
                         <button
                           type="button"
@@ -367,7 +419,10 @@ export function SendPage({ shares, markets }: { shares: Share[]; markets: Market
                         </button>
                       ))}
                       {choice === "other" ? (
-                        <label className="send-chip send-chip-input" data-selected="true">
+                        <label
+                          className="send-chip send-chip-input"
+                          data-selected="true"
+                        >
                           <span aria-hidden="true">$</span>
                           <input
                             className="send-chip-field"
@@ -379,7 +434,9 @@ export function SendPage({ shares, markets }: { shares: Share[]; markets: Market
                             autoFocus
                             value={otherText}
                             onChange={(event) => {
-                              if (/^\d{0,6}(\.\d{0,2})?$/.test(event.target.value))
+                              if (
+                                /^\d{0,6}(\.\d{0,2})?$/.test(event.target.value)
+                              )
                                 setOtherText(event.target.value);
                             }}
                           />
@@ -397,8 +454,8 @@ export function SendPage({ shares, markets }: { shares: Share[]; markets: Market
                     </div>
                     {kind === "shares" && share && amount > ZERO ? (
                       <p className="send-hint">
-                        About {units(giftUnits)} {shareTicker(share.asset_id)}, at{" "}
-                        {money(share.price)} for {shareSize(share.asset_id)}
+                        About {units(giftUnits)} {shareTicker(share.asset_id)},
+                        at {money(share.price)} for {shareSize(share.asset_id)}
                         {buyFirst
                           ? `. You hold ${units(held)}, so Marks buys the rest first.`
                           : ", from what you hold."}
@@ -415,7 +472,9 @@ export function SendPage({ shares, markets }: { shares: Share[]; markets: Market
                     placeholder="Write them a note. Only the link can read it."
                     aria-label="A note for the person you are gifting"
                     aria-describedby={noteId}
-                    onChange={(event) => setNote(event.target.value.slice(0, MAX_NOTE_TEXT))}
+                    onChange={(event) =>
+                      setNote(event.target.value.slice(0, MAX_NOTE_TEXT))
+                    }
                   />
                   <p className="send-counter" id={noteId}>
                     {MAX_NOTE_TEXT - new TextEncoder().encode(note).length} left
@@ -423,7 +482,11 @@ export function SendPage({ shares, markets }: { shares: Share[]; markets: Market
                 </div>
 
                 <div className="send-block">
-                  <div className="send-chips" role="group" aria-label="How long the gift lasts">
+                  <div
+                    className="send-chips"
+                    role="group"
+                    aria-label="How long the gift lasts"
+                  >
                     {LIFETIMES.map((option) => (
                       <button
                         type="button"
@@ -437,14 +500,19 @@ export function SendPage({ shares, markets }: { shares: Share[]; markets: Market
                     ))}
                   </div>
                   <p className="send-hint">
-                    If they don&apos;t open it in time, you can take it back.
+                    You can revoke it any time before they open it. The link
+                    stops working.
                   </p>
                 </div>
 
                 <dl className="send-summary">
                   <div className="send-summary-row">
                     <dt>THE GIFT</dt>
-                    <dd>{kind === "position" ? `${money(equity)} of equity` : money(amount)}</dd>
+                    <dd>
+                      {kind === "position"
+                        ? `${money(equity)} of equity`
+                        : money(amount)}
+                    </dd>
                   </div>
                   <div className="send-summary-row">
                     <dt>GIFT WRAP, 1 PERCENT</dt>
@@ -461,7 +529,10 @@ export function SendPage({ shares, markets }: { shares: Share[]; markets: Market
                 </dl>
 
                 {stale && share ? (
-                  <RefreshPrice share={share} onDone={() => window.location.reload()} />
+                  <RefreshPrice
+                    share={share}
+                    onDone={() => window.location.reload()}
+                  />
                 ) : (
                   <button
                     type="button"
@@ -479,8 +550,9 @@ export function SendPage({ shares, markets }: { shares: Share[]; markets: Market
                 ) : null}
                 {kind === "position" ? (
                   <p className="send-hint">
-                    The position is frozen while the gift is open: no orders, no borrowing. If it is
-                    liquidated first, the gift is void and the fee is spent.
+                    The position is frozen while the gift is open: no orders, no
+                    borrowing. If it is liquidated first, the gift is void and
+                    the fee is spent.
                   </p>
                 ) : null}
               </fieldset>
@@ -495,7 +567,10 @@ export function SendPage({ shares, markets }: { shares: Share[]; markets: Market
             ) : null}
           </div>
 
-          <aside className="send-side" data-mode={run.phase === "done" ? "done" : "form"}>
+          <aside
+            className="send-side"
+            data-mode={run.phase === "done" ? "done" : "form"}
+          >
             {run.phase === "done" ? (
               <LinkCard
                 link={run.link}
@@ -508,7 +583,9 @@ export function SendPage({ shares, markets }: { shares: Share[]; markets: Market
               />
             ) : (
               <div className="send-preview">
-                <p className="send-label send-label-small">WHAT THEY&apos;LL SEE</p>
+                <p className="send-label send-label-small">
+                  WHAT THEY&apos;LL SEE
+                </p>
                 <div className="send-cert" style={DRAWN}>
                   <Certificate
                     figure={preview.figure}
@@ -574,7 +651,10 @@ function LinkCard({
     <section className="send-card send-rise" aria-label="Your gift">
       <h2 className="send-card-title">Your gift is ready.</h2>
       <div className="send-field">
-        <code className="send-field-text" data-shown={shown ? "true" : undefined}>
+        <code
+          className="send-field-text"
+          data-shown={shown ? "true" : undefined}
+        >
           {shown ? link : masked}
         </code>
         <button
@@ -587,14 +667,20 @@ function LinkCard({
         </button>
       </div>
       <div className="send-card-actions">
-        <button type="button" className="send-primary" onClick={() => void copy()}>
+        <button
+          type="button"
+          className="send-primary"
+          onClick={() => void copy()}
+        >
           {copied ? "Copied" : "Copy link"}
         </button>
         <a className="send-secondary" href={mail}>
           Email it
         </a>
       </div>
-      <p className="send-warning">Anyone with this link can open the gift. Send it only to them.</p>
+      <p className="send-warning">
+        Anyone with this link can open the gift. Send it only to them.
+      </p>
       {hash ? (
         <p className="send-warning">
           <a
@@ -616,7 +702,8 @@ function LinkCard({
 
 function describe(asset: GiftAsset) {
   if (asset.kind === "usdc") return money(asset.amount);
-  if (asset.kind === "shares") return `${units(asset.units)} ${shareTicker(asset.asset_id)}`;
+  if (asset.kind === "shares")
+    return `${units(asset.units)} ${shareTicker(asset.asset_id)}`;
   return asset.symbol;
 }
 
@@ -645,16 +732,16 @@ function MyGifts({
   const [links, setLinks] = useState<Record<string, string>>({});
   const [copied, setCopied] = useState<number | null>(null);
   const [busy, setBusy] = useState<number | null>(null);
-  const [problem, setProblem] = useState("");
+  const [note, setNote] = useState<{ id: number; text: string } | null>(null);
 
   const load = useCallback(async () => {
     const [out, into] = await Promise.all([
-      viewMarks<Gift[]>(network, "get_gifts_sent", { account_id: account }).catch(
-        () => [] as Gift[],
-      ),
-      viewMarks<Gift[]>(network, "get_gifts_received", { account_id: account }).catch(
-        () => [] as Gift[],
-      ),
+      viewMarks<Gift[]>(network, "get_gifts_sent", {
+        account_id: account,
+      }).catch(() => [] as Gift[]),
+      viewMarks<Gift[]>(network, "get_gifts_received", {
+        account_id: account,
+      }).catch(() => [] as Gift[]),
     ]);
     const pending = pendingOf(contract, account);
     for (const gift of out) {
@@ -677,6 +764,59 @@ function MyGifts({
     void load();
   }, [load, tick]);
 
+  useEffect(() => {
+    if (Object.keys(links).length === 0) return;
+    void publishGiftLinks({ network, account, links }).catch(() => undefined);
+  }, [account, links, network]);
+
+  async function copyLink(gift: Gift, link: string | undefined) {
+    setNote(null);
+    let href = link;
+    if (!href) {
+      try {
+        const saved = await pullGiftLinks({ network, contract, account });
+        href = saved[String(gift.id)];
+      } catch (caught) {
+        setNote({ id: gift.id, text: reason(caught) });
+        return;
+      }
+    }
+    if (!href) {
+      setNote({
+        id: gift.id,
+        text: "This account has no saved claim link for that gift. Open Send a gift on the browser that sent it, while signed in, and approve the wallet. Then copy it here.",
+      });
+      return;
+    }
+    void navigator.clipboard.writeText(href).then(
+      () => {
+        setCopied(gift.id);
+        window.setTimeout(
+          () => setCopied((current) => (current === gift.id ? null : current)),
+          2000,
+        );
+      },
+      () =>
+        setNote({
+          id: gift.id,
+          text: "The link didn't copy. Allow clipboard access and try again.",
+        }),
+    );
+  }
+
+  function revoke(gift: Gift) {
+    setBusy(gift.id);
+    setNote(null);
+    void cancelGift(send, gift.id)
+      .then(() => {
+        forgetLink(contract, account, gift.id);
+        onChange();
+        return load();
+      })
+      .catch((caught) => setNote({ id: gift.id, text: reason(caught) }))
+      .finally(() => setBusy(null));
+  }
+
   if (!sent || (sent.length === 0 && received.length === 0)) return null;
   const now = Date.now() * 1e6;
 
@@ -693,10 +833,14 @@ function MyGifts({
               return (
                 <li className="send-gift" key={gift.id}>
                   <span className="send-gift-id">#{gift.id}</span>
-                  <span className="send-gift-symbol">{describe(gift.asset)}</span>
+                  <span className="send-gift-symbol">
+                    {describe(gift.asset)}
+                  </span>
                   <span className="send-gift-state">
                     {chip ? (
-                      <span className={`send-gift-chip send-gift-chip-${chip.tone}`}>
+                      <span
+                        className={`send-gift-chip send-gift-chip-${chip.tone}`}
+                      >
                         {chip.text}
                       </span>
                     ) : expired ? (
@@ -705,50 +849,39 @@ function MyGifts({
                       `Waiting to be opened, until ${shortDate(gift.expiry_ns)}`
                     )}
                   </span>
-                  <span className="send-gift-actions">
-                    {gift.status === "open" && link ? (
+                  {gift.status === "open" ? (
+                    <span className="send-gift-actions">
                       <button
                         type="button"
                         className="send-link send-link-small"
-                        onClick={() =>
-                          void navigator.clipboard.writeText(link).then(() => {
-                            setCopied(gift.id);
-                            window.setTimeout(() => setCopied(null), 2000);
-                          })
-                        }
+                        aria-label={`Copy link for gift ${gift.id}`}
+                        onClick={() => copyLink(gift, link)}
                       >
                         {copied === gift.id ? "Copied" : "Copy link"}
                       </button>
-                    ) : null}
-                    {expired ? (
                       <button
                         type="button"
                         className="send-link send-link-small"
+                        aria-label={`Revoke gift ${gift.id}`}
                         disabled={busy === gift.id}
-                        onClick={() => {
-                          setBusy(gift.id);
-                          setProblem("");
-                          void send("refund_gift", { gift_id: gift.id }, { gas: GIFT_GAS })
-                            .then(() => {
-                              onChange();
-                              return load();
-                            })
-                            .catch((caught) => setProblem(reason(caught)))
-                            .finally(() => setBusy(null));
-                        }}
+                        onClick={() => revoke(gift)}
                       >
-                        {busy === gift.id ? "Taking it back" : "Take it back"}
+                        {busy === gift.id ? "Revoking" : "Revoke"}
                       </button>
-                    ) : null}
-                  </span>
+                    </span>
+                  ) : null}
                   {gift.recipient ? (
                     <p className="send-gift-note">Opened by {gift.recipient}</p>
+                  ) : null}
+                  {note?.id === gift.id ? (
+                    <p className="send-gift-note" role="status">
+                      {note.text}
+                    </p>
                   ) : null}
                 </li>
               );
             })}
           </ul>
-          {problem ? <p className="send-warning">{problem}</p> : null}
         </>
       ) : null}
       {received.length > 0 ? (
