@@ -14,7 +14,10 @@ export function missingContract(
       (network === "mainnet"
         ? "Mainnet has no listing"
         : "No contract configured"),
-    body: "Set VITE_CONTRACT_ID to the testnet account that holds Marks v2.",
+    body:
+      network === "mainnet"
+        ? "This sign-in is your NEAR mainnet account, for a payment link. Marks trades stay on testnet. Sign out and sign in on testnet to trade."
+        : "Set VITE_CONTRACT_ID to the testnet account that holds Marks v2.",
   };
 }
 
