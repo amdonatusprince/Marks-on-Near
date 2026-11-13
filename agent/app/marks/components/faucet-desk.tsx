@@ -1,14 +1,16 @@
-"use client";
-
-import { useToast } from "@/components/toast";
-import { BalanceStrip, Row, TxNote } from "@/components/v2-ui";
-import { atomsFromDollars, money } from "@/lib/format";
-import { ONE_YOCTO, useNear } from "@/lib/near";
-import { contractFor, tokenFor } from "@/lib/network";
-import { useAction, useWallet } from "@/lib/use-v2";
+import { useToast } from "@/marks/components/toast";
+import { BalanceStrip, Row, TxNote } from "@/marks/components/v2-ui";
+import { atomsFromDollars, money } from "@/marks/lib/format";
+import {
+  claimFaucetByRelay,
+  claimFaucetSelf,
+  depositToMarks,
+  withdrawFromMarks,
+} from "@/marks/lib/desk-writes";
+import { useNear } from "@/marks/lib/near";
+import { contractFor, tokenFor } from "@/marks/lib/network";
+import { useAction, useWallet } from "@/marks/lib/use-v2";
 import { useId, useState } from "react";
-
-const TRANSFER_GAS = "100000000000000";
 
 export function FaucetDesk() {
   const { account, network, openDialog, send } = useNear();
@@ -25,19 +27,12 @@ export function FaucetDesk() {
 
   const faucet = () =>
     void claim
-      .run("faucet", async () => {
-        const response = await fetch("/api/faucet", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ account_id: account }),
-        });
-        const body = (await response.json().catch(() => ({}))) as { hash?: string; error?: string };
-        if (response.ok && body.hash) return body.hash;
-        if (response.status === 429)
-          throw new Error("This account already claimed today. Come back in 24 hours.");
-        // With the relayer down, the account claims for itself and pays the gas.
-        return send("faucet", { account_id: null }, { receiverId: token });
-      })
+      .run(
+        "faucet",
+        async () =>
+          (await claimFaucetByRelay(account ?? "")) ??
+          claimFaucetSelf(send, token),
+      )
       .then((hash) => hash !== null && refresh());
 
   return (
@@ -46,10 +41,13 @@ export function FaucetDesk() {
       <ol className="grid gap-5 lg:grid-cols-3">
         <li className="panel flex h-full flex-col gap-4 p-5">
           <p className="label-mono">Step 01</p>
-          <h2 className="font-display text-2xl font-semibold">Claim 1,000 mUSDC</h2>
+          <h2 className="font-display text-2xl font-semibold">
+            Claim 1,000 mUSDC
+          </h2>
           <p className="text-sm text-ink-muted">
-            Marks mock USDC has six decimals, like USDC. Each account can claim once a day. Our
-            relayer pays the gas, so a new Google account works at once.
+            Marks mock USDC has six decimals, like USDC. Each account can claim
+            once a day. Our relayer pays the gas, so a new Google account works
+            at once.
           </p>
           <dl>
             <Row label="Token" value={token || "not set"} />
@@ -62,7 +60,11 @@ export function FaucetDesk() {
               disabled={Boolean(claim.busy)}
               onClick={account ? faucet : openDialog}
             >
-              {claim.busy ? "Minting" : account ? "Claim 1,000 mUSDC" : "Sign in to claim"}
+              {claim.busy
+                ? "Minting"
+                : account
+                  ? "Claim 1,000 mUSDC"
+                  : "Sign in to claim"}
             </button>
             <TxNote
               hash={claim.hash}
@@ -75,11 +77,13 @@ export function FaucetDesk() {
 
         <li className="panel flex h-full flex-col gap-4 p-5">
           <p className="label-mono">Step 02</p>
-          <h2 className="font-display text-2xl font-semibold">From any chain</h2>
+          <h2 className="font-display text-2xl font-semibold">
+            From any chain
+          </h2>
           <p className="text-sm text-ink-muted">
-            NEAR Intents is the way in and the way out. Deposit USDC on another chain and it arrives
-            on NEAR. Withdraw, and Intents sends it back to the chain you choose. You do not bridge
-            it yourself.
+            NEAR Intents is the way in and the way out. Deposit USDC on another
+            chain and it arrives on NEAR. Withdraw, and Intents sends it back to
+            the chain you choose. You do not bridge it yourself.
           </p>
           <div className="mt-auto space-y-4">
             <button
@@ -98,10 +102,12 @@ export function FaucetDesk() {
 
         <li className="panel flex h-full flex-col gap-4 p-5">
           <p className="label-mono">Step 03</p>
-          <h2 className="font-display text-2xl font-semibold">Move it into Marks</h2>
+          <h2 className="font-display text-2xl font-semibold">
+            Move it into Marks
+          </h2>
           <p className="text-sm text-ink-muted">
-            Your Marks balance pays for trades, shares, calls, loan repayments and gifts. Withdraw
-            sends it back to your wallet.
+            Your Marks balance pays for trades, shares, calls, loan repayments
+            and gifts. Withdraw sends it back to your wallet.
           </p>
           <div className="mt-auto space-y-4">
             <div
@@ -132,8 +138,11 @@ export function FaucetDesk() {
               onSubmit={(event) => {
                 event.preventDefault();
                 if (!account) return openDialog();
-                if (!atoms) return move.setError("Enter an amount, such as 500.");
-                const limit = BigInt(direction === "in" ? wallet.usdc : wallet.balance);
+                if (!atoms)
+                  return move.setError("Enter an amount, such as 500.");
+                const limit = BigInt(
+                  direction === "in" ? wallet.usdc : wallet.balance,
+                );
                 if (atoms > limit) {
                   return move.setError(
                     direction === "in"
@@ -144,12 +153,8 @@ export function FaucetDesk() {
                 void move
                   .run(direction, () =>
                     direction === "in"
-                      ? send(
-                          "ft_transfer_call",
-                          { receiver_id: contract, amount: atoms.toString(), msg: "deposit" },
-                          { receiverId: token, deposit: ONE_YOCTO, gas: TRANSFER_GAS },
-                        )
-                      : send("withdraw", { amount: atoms.toString() }, { gas: TRANSFER_GAS }),
+                      ? depositToMarks(send, token, contract, atoms)
+                      : withdrawFromMarks(send, atoms),
                   )
                   .then((hash) => {
                     if (hash !== null) {
@@ -168,7 +173,11 @@ export function FaucetDesk() {
                   className="text-xs text-gold underline-offset-4 hover:underline"
                   onClick={() =>
                     setAmount(
-                      (Number(direction === "in" ? wallet.usdc : wallet.balance) / 1e6).toFixed(2),
+                      (
+                        Number(
+                          direction === "in" ? wallet.usdc : wallet.balance,
+                        ) / 1e6
+                      ).toFixed(2),
                     )
                   }
                 >
@@ -184,7 +193,11 @@ export function FaucetDesk() {
                 value={amount}
                 onChange={(event) => setAmount(event.target.value)}
               />
-              <button type="submit" className="btn-gold w-full" disabled={Boolean(move.busy)}>
+              <button
+                type="submit"
+                className="btn-gold w-full"
+                disabled={Boolean(move.busy)}
+              >
                 {move.busy
                   ? "Sending"
                   : direction === "in"
