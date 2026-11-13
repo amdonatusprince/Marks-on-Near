@@ -1,11 +1,25 @@
-"use client";
-
-import { RefreshPrice } from "@/components/stocks-desk";
-import { BalanceStrip, Row, Stat, Tabs, TxNote } from "@/components/v2-ui";
-import { atomsFromDollars, grouped, liquidationPrice, money } from "@/lib/format";
-import { useNear } from "@/lib/near";
-import type { Market, Trader } from "@/lib/rpc";
-import { useAction, useClock, useWallet } from "@/lib/use-v2";
+import { RefreshPrice } from "@/marks/components/stocks-desk";
+import {
+  BalanceStrip,
+  Row,
+  Stat,
+  Tabs,
+  TxNote,
+} from "@/marks/components/v2-ui";
+import {
+  atomsFromDollars,
+  grouped,
+  liquidationPrice,
+  money,
+} from "@/marks/lib/format";
+import {
+  borrowAgainstShares,
+  borrowOnPosition,
+  repayShareLoan,
+} from "@/marks/lib/desk-writes";
+import { useNear } from "@/marks/lib/near";
+import type { Market, Trader } from "@/marks/lib/rpc";
+import { useAction, useClock, useWallet } from "@/marks/lib/use-v2";
 import {
   SHARE_LIQUIDATION_BPS,
   SHARE_LTV_BPS,
@@ -20,9 +34,9 @@ import {
   type Pool,
   type Share,
   type ShareLoan,
-} from "@/lib/v2";
-import Link from "next/link";
-import { useRouter } from "next/navigation";
+} from "@/marks/lib/v2";
+import Link from "@/marks/components/link";
+import { useRouter } from "@/marks/lib/navigation";
 import { useEffect, useId, useState } from "react";
 
 const ZERO = BigInt(0);
@@ -38,10 +52,12 @@ export function BorrowDesk({
   markets: Market[];
   shares: Share[];
   pool: Pool;
-  initialSymbol?: string;
-  initialAsset?: string;
+  initialSymbol?: string | undefined;
+  initialAsset?: string | undefined;
 }) {
-  const [mode, setMode] = useState<"perp" | "shares">(initialAsset ? "shares" : "perp");
+  const [mode, setMode] = useState<"perp" | "shares">(
+    initialAsset ? "shares" : "perp",
+  );
   const { wallet, loading, refresh } = useWallet();
   const router = useRouter();
   const after = () => {
@@ -58,8 +74,9 @@ export function BorrowDesk({
           <Stat label="Out on loan" value={money(pool.lent)} />
           <Stat label="Fees earned" value={money(pool.fees)} />
           <p className="text-xs text-ink-muted">
-            Marks funds the pool. Each loan costs 1 percent once, added to the debt. Borrowed USDC
-            lands in your Marks balance, where you can trade, buy, gift or withdraw it.
+            Marks funds the pool. Each loan costs 1 percent once, added to the
+            debt. Borrowed USDC lands in your Marks balance, where you can
+            trade, buy, gift or withdraw it.
           </p>
         </aside>
         <section className="space-y-5">
@@ -104,7 +121,7 @@ function PerpLoans({
   onDone,
 }: {
   markets: Market[];
-  initial?: string;
+  initial?: string | undefined;
   balance: string;
   onDone: () => void;
 }) {
@@ -118,7 +135,10 @@ function PerpLoans({
     let cancelled = false;
     void Promise.all(
       markets.map((market) =>
-        viewMarks<Trader>(network, "get_trader", { symbol: market.symbol, account_id: account })
+        viewMarks<Trader>(network, "get_trader", {
+          symbol: market.symbol,
+          account_id: account,
+        })
           .then((trader) => ({ market, trader }))
           .catch(() => null),
       ),
@@ -126,7 +146,8 @@ function PerpLoans({
       if (cancelled) return;
       const open = rows.filter(
         (row): row is Held =>
-          row !== null && (row.trader.base_lots !== 0 || BigInt(row.trader.debt ?? "0") > ZERO),
+          row !== null &&
+          (row.trader.base_lots !== 0 || BigInt(row.trader.debt ?? "0") > ZERO),
       );
       setHeld(open);
       setPicked((current) =>
@@ -149,7 +170,8 @@ function PerpLoans({
       </div>
     );
   }
-  if (!held) return <p className="text-sm text-ink-muted">Reading your positions…</p>;
+  if (!held)
+    return <p className="text-sm text-ink-muted">Reading your positions…</p>;
   if (held.length === 0) {
     return (
       <div className="panel space-y-3 p-5">
@@ -161,6 +183,7 @@ function PerpLoans({
     );
   }
   const row = held.find((item) => item.market.symbol === picked) ?? held[0];
+  if (!row) return null;
   return (
     <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
       <ul className="grid h-fit gap-2" aria-label="Your positions">
@@ -175,7 +198,11 @@ function PerpLoans({
               <span className="flex justify-between gap-3">
                 <span className="font-semibold">{market.symbol}</span>
                 <span className="font-mono">
-                  {trader.base_lots > 0 ? "Long" : trader.base_lots < 0 ? "Short" : "Flat"}{" "}
+                  {trader.base_lots > 0
+                    ? "Long"
+                    : trader.base_lots < 0
+                      ? "Short"
+                      : "Flat"}{" "}
                   {grouped(Math.abs(trader.base_lots))}
                 </span>
               </span>
@@ -219,7 +246,11 @@ function PerpLoanTicket({
   const limit = BigInt(trader.borrow_limit ?? "0");
   const atoms = atomsFromDollars(amount) ?? ZERO;
   const charge = fee(atoms);
-  const after = repay ? (debt > atoms ? debt - atoms : ZERO) : debt + atoms + charge;
+  const after = repay
+    ? debt > atoms
+      ? debt - atoms
+      : ZERO
+    : debt + atoms + charge;
   const liquidation = (owed: bigint) =>
     liquidationPrice(
       BigInt(trader.collateral) - owed,
@@ -238,13 +269,22 @@ function PerpLoanTicket({
         event.preventDefault();
         if (atoms === ZERO) return setError("Enter an amount in USDC.");
         if (!repay && atoms > limit) {
-          return setError(`The most you can borrow on ${market.symbol} is ${money(limit)}.`);
+          return setError(
+            `The most you can borrow on ${market.symbol} is ${money(limit)}.`,
+          );
         }
         if (repay && atoms > BigInt(balance)) {
-          return setError("Your Marks balance is short. Deposit from the faucet page first.");
+          return setError(
+            "Your Marks balance is short. Deposit from the faucet page first.",
+          );
         }
         void run(repay ? "repay" : "borrow", () =>
-          send(repay ? "repay" : "borrow", { symbol: market.symbol, amount: atoms.toString() }),
+          borrowOnPosition(
+            send,
+            repay ? "repay" : "borrow",
+            market.symbol,
+            atoms,
+          ),
         ).then((done) => {
           if (done !== null) {
             setAmount("");
@@ -264,8 +304,8 @@ function PerpLoanTicket({
       />
       {frozen ? (
         <p className="text-sm text-gold">
-          This position is held for gift {trader.gift_id}. Borrowing opens again once it is claimed
-          or refunded.
+          This position is held for gift {trader.gift_id}. Borrowing opens again
+          once it is claimed or refunded.
         </p>
       ) : null}
       <div>
@@ -276,7 +316,9 @@ function PerpLoanTicket({
           <button
             type="button"
             className="text-xs text-gold underline-offset-4 hover:underline"
-            onClick={() => setAmount((Number(repay ? debt : limit) / 1e6).toFixed(2))}
+            onClick={() =>
+              setAmount((Number(repay ? debt : limit) / 1e6).toFixed(2))
+            }
           >
             {repay ? `All ${money(debt)}` : `Max ${money(limit)}`}
           </button>
@@ -296,26 +338,40 @@ function PerpLoanTicket({
         <Row label="Debt now" value={money(debt)} />
         <Row label="Debt after" value={money(after)} strong />
         <Row label="Liquidation now" value={now ? money(now) : "None"} />
-        <Row label="Liquidation after" value={next ? money(next) : "None"} strong />
-        <Row label="Mark" value={money(BigInt(market.mark_ticks) * BigInt(market.tick_size))} />
+        <Row
+          label="Liquidation after"
+          value={next ? money(next) : "None"}
+          strong
+        />
+        <Row
+          label="Mark"
+          value={money(BigInt(market.mark_ticks) * BigInt(market.tick_size))}
+        />
       </dl>
       <p className="text-xs text-ink-muted">
-        The limit is your collateral plus half of any open profit, less losses, debt and the 10
-        percent initial margin. If the price reaches the liquidation level, the debt is repaid from
-        collateral before anything else.
+        The limit is your collateral plus half of any open profit, less losses,
+        debt and the 10 percent initial margin. If the price reaches the
+        liquidation level, the debt is repaid from collateral before anything
+        else.
       </p>
       <button
         type="submit"
         className="btn-gold w-full"
         disabled={Boolean(busy) || (frozen && !repay)}
       >
-        {busy ? "Sending" : repay ? `Repay ${money(atoms)}` : `Borrow ${money(atoms)}`}
+        {busy
+          ? "Sending"
+          : repay
+            ? `Repay ${money(atoms)}`
+            : `Borrow ${money(atoms)}`}
       </button>
       <TxNote
         hash={hash}
         error={error}
         pulse={pulse}
-        done={repay ? "Repaid." : "Borrowed. The USDC is in your Marks balance."}
+        done={
+          repay ? "Repaid." : "Borrowed. The USDC is in your Marks balance."
+        }
       />
     </form>
   );
@@ -332,7 +388,7 @@ function ShareLoans({
   shares: Share[];
   holdings: Record<string, string>;
   loans: Record<string, ShareLoan>;
-  initial?: string;
+  initial?: string | undefined;
   balance: string;
   onDone: () => void;
 }) {
@@ -363,6 +419,7 @@ function ShareLoans({
     );
   }
   const share = owned.find((item) => item.asset_id === picked) ?? owned[0];
+  if (!share) return null;
   return (
     <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
       <ul className="grid h-fit gap-2" aria-label="Your shares">
@@ -377,7 +434,9 @@ function ShareLoans({
                 className={`panel w-full p-4 text-left ${item.asset_id === share.asset_id ? "border-gold" : "hover:border-ink-muted"}`}
               >
                 <span className="flex justify-between gap-3">
-                  <span className="font-semibold">{shareTicker(item.asset_id)}</span>
+                  <span className="font-semibold">
+                    {shareTicker(item.asset_id)}
+                  </span>
                   <span className="font-mono">{money(item.price)}</span>
                 </span>
                 <span className="mt-1 flex justify-between gap-3 text-xs text-ink-muted">
@@ -430,7 +489,11 @@ function ShareLoanTicket({
   const lockedAfter = BigInt(loan.units) + lockUnits;
   const atoms = atomsFromDollars(amount) ?? ZERO;
   const value = valueOf(lockedAfter, price);
-  const debtAfter = repay ? (debt > atoms ? debt - atoms : ZERO) : debt + atoms + fee(atoms);
+  const debtAfter = repay
+    ? debt > atoms
+      ? debt - atoms
+      : ZERO
+    : debt + atoms + fee(atoms);
   const room = (value * SHARE_LTV_BPS) / BPS;
   const max = room > debt ? ((room - debt) * BigInt(100)) / BigInt(101) : ZERO;
   const ltv = value > ZERO ? Number((debtAfter * BPS) / value) / 100 : 0;
@@ -450,21 +513,21 @@ function ShareLoanTicket({
         if (repay) {
           if (atoms === ZERO) return setError("Enter an amount in USDC.");
           if (atoms > BigInt(balance)) {
-            return setError("Your Marks balance is short. Deposit from the faucet page first.");
+            return setError(
+              "Your Marks balance is short. Deposit from the faucet page first.",
+            );
           }
         } else {
-          if (lockUnits > BigInt(free)) return setError("You hold fewer free shares than that.");
+          if (lockUnits > BigInt(free))
+            return setError("You hold fewer free shares than that.");
           if (atoms === ZERO) return setError("Enter an amount in USDC.");
-          if (atoms > max) return setError(`The most you can borrow is ${money(max)}.`);
+          if (atoms > max)
+            return setError(`The most you can borrow is ${money(max)}.`);
         }
         void run(repay ? "repay" : "borrow", () =>
           repay
-            ? send("repay_share_loan", { asset_id: share.asset_id, amount: atoms.toString() })
-            : send("borrow_against", {
-                asset_id: share.asset_id,
-                units: lockUnits.toString(),
-                amount: atoms.toString(),
-              }),
+            ? repayShareLoan(send, share.asset_id, atoms)
+            : borrowAgainstShares(send, share.asset_id, lockUnits, atoms),
         ).then((done) => {
           if (done !== null) {
             setAmount("");
@@ -505,7 +568,9 @@ function ShareLoanTicket({
           <button
             type="button"
             className="text-xs text-gold underline-offset-4 hover:underline"
-            onClick={() => setAmount((Number(repay ? debt : max) / 1e6).toFixed(2))}
+            onClick={() =>
+              setAmount((Number(repay ? debt : max) / 1e6).toFixed(2))
+            }
           >
             {repay ? `All ${money(debt)}` : `Max ${money(max)}`}
           </button>
@@ -521,26 +586,46 @@ function ShareLoanTicket({
         />
       </div>
       <dl className="rounded-lg border border-line px-3 py-2">
-        <Row label="Locked shares" value={`${units(lockedAfter)} ${shareTicker(share.asset_id)}`} />
+        <Row
+          label="Locked shares"
+          value={`${units(lockedAfter)} ${shareTicker(share.asset_id)}`}
+        />
         <Row label="Locked value" value={money(value)} />
-        {!repay ? <Row label="Fee, 1 percent" value={money(fee(atoms))} /> : null}
+        {!repay ? (
+          <Row label="Fee, 1 percent" value={money(fee(atoms))} />
+        ) : null}
         <Row label="Debt after" value={money(debtAfter)} strong />
         <Row label="Loan to value" value={`${ltv.toFixed(1)}% of 50% max`} />
-        <Row label="Liquidation price" value={liquidation ? money(liquidation) : "None"} strong />
+        <Row
+          label="Liquidation price"
+          value={liquidation ? money(liquidation) : "None"}
+          strong
+        />
       </dl>
       <p className="text-xs text-ink-muted">
-        Shares stay yours while locked. If the price falls until the debt passes 65 percent of their
-        value, anyone may sell them to the desk: the pool is repaid, the caller earns 1 percent and
-        the rest returns to you. Repaying in full unlocks every share.
+        Shares stay yours while locked. If the price falls until the debt passes
+        65 percent of their value, anyone may sell them to the desk: the pool is
+        repaid, the caller earns 1 percent and the rest returns to you. Repaying
+        in full unlocks every share.
       </p>
-      <button type="submit" className="btn-gold w-full" disabled={Boolean(busy)}>
-        {busy ? "Sending" : repay ? `Repay ${money(atoms)}` : `Borrow ${money(atoms)}`}
+      <button
+        type="submit"
+        className="btn-gold w-full"
+        disabled={Boolean(busy)}
+      >
+        {busy
+          ? "Sending"
+          : repay
+            ? `Repay ${money(atoms)}`
+            : `Borrow ${money(atoms)}`}
       </button>
       <TxNote
         hash={hash}
         error={error}
         pulse={pulse}
-        done={repay ? "Repaid." : "Borrowed. The USDC is in your Marks balance."}
+        done={
+          repay ? "Repaid." : "Borrowed. The USDC is in your Marks balance."
+        }
       />
     </form>
   );
