@@ -127,6 +127,18 @@ export const borrowAgainstShares = (
 export const repayShareLoan = (send: Send, assetId: string, amount: bigint) =>
   send("repay_share_loan", { asset_id: assetId, amount: amount.toString() });
 
+export const payBill = (
+  send: Send,
+  merchant: string,
+  amount: bigint,
+  source: string,
+) =>
+  send("pay", {
+    merchant,
+    amount: amount.toString(),
+    source,
+  });
+
 export const cancelOrder = (send: Send, symbol: string, orderId: number) =>
   send("cancel_order", { symbol, order_id: orderId });
 
