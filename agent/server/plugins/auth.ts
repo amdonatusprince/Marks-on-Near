@@ -11,5 +11,10 @@ export default createToolkitAuthPlugin({
     "/api/gift/links",
     "/api/near-auth",
     "/api/quote",
+    "/api/checkout/quote",
+    "/api/checkout/status",
+    "/api/checkout/tokens",
+    "/api/checkout/links",
+    "/api/checkout/paid",
   ],
 });
