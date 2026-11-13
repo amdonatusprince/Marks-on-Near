@@ -6,6 +6,60 @@ import { explorerTx } from "@/marks/lib/v2";
 import Link from "@/marks/components/link";
 import { useEffect, useRef } from "react";
 
+/** Previous and next for a short list. Hidden when everything fits on one page. */
+export function Pager({
+  page,
+  pages,
+  onPage,
+  label,
+}: {
+  page: number;
+  pages: number;
+  onPage: (page: number) => void;
+  label: string;
+}) {
+  if (pages <= 1) return null;
+  return (
+    <nav
+      className="flex items-center justify-between gap-3 pt-3"
+      aria-label={label}
+    >
+      <button
+        type="button"
+        className="btn-line text-sm"
+        disabled={page <= 0}
+        onClick={() => onPage(page - 1)}
+      >
+        Previous
+      </button>
+      <p className="text-sm text-ink-muted tabular-nums">
+        {page + 1} of {pages}
+      </p>
+      <button
+        type="button"
+        className="btn-line text-sm"
+        disabled={page >= pages - 1}
+        onClick={() => onPage(page + 1)}
+      >
+        Next
+      </button>
+    </nav>
+  );
+}
+
+/** Page wait, centered on the screen. The label is for screen readers only. */
+export function Spinner() {
+  return (
+    <div
+      className="pointer-events-none fixed inset-0 z-30 flex items-center justify-center"
+      role="status"
+    >
+      <span className="marks-spin" aria-hidden />
+      <span className="sr-only">Loading</span>
+    </div>
+  );
+}
+
 /** Wallet mUSDC and the Marks balance. `topUp` links to the faucet; the faucet page hides it. */
 export function BalanceStrip({
   wallet,

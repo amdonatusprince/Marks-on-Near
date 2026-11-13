@@ -192,6 +192,12 @@ button {
   animation: marks-spin 0.7s linear infinite;
 }
 
+@media (prefers-reduced-motion: reduce) {
+  .marks-spin {
+    animation: none;
+  }
+}
+
 @keyframes marks-spin {
   to {
     transform: rotate(360deg);

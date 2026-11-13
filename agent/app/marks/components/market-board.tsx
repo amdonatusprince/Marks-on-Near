@@ -141,14 +141,16 @@ export function PageHead({
   title,
   italic,
   lede,
+  center = false,
 }: {
   label?: string;
   title: string;
   italic?: string;
   lede?: string;
+  center?: boolean;
 }) {
   return (
-    <header className="mb-8">
+    <header className={`mb-8${center ? " text-center" : ""}`}>
       {label ? <p className="label-mono">{label}</p> : null}
       <h1
         className={`display text-[clamp(2.4rem,6vw,4.5rem)]${label ? " mt-3" : ""}`}
@@ -157,7 +159,9 @@ export function PageHead({
         {italic ? <span className="display-italic">{italic}</span> : null}
       </h1>
       {lede ? (
-        <p className="mt-4 max-w-[60ch] text-base text-ink-muted md:text-lg">
+        <p
+          className={`mt-4 max-w-[60ch] text-base text-ink-muted md:text-lg${center ? " mx-auto" : ""}`}
+        >
           {lede}
         </p>
       ) : null}
