@@ -22,7 +22,12 @@ function write(contract: string, account: string, vault: Vault) {
 }
 
 /** Save the secret under its public key before the transaction, so a closed tab loses nothing. */
-export function holdSecret(contract: string, account: string, claimKey: string, secret: string) {
+export function holdSecret(
+  contract: string,
+  account: string,
+  claimKey: string,
+  secret: string,
+) {
   const vault = read(contract, account);
   vault.pending[claimKey] = secret;
   write(contract, account, vault);
@@ -43,6 +48,23 @@ export function saveLink(
 
 export function linksOf(contract: string, account: string) {
   return read(contract, account).links;
+}
+
+export function rememberLink(
+  contract: string,
+  account: string,
+  giftId: number,
+  link: string,
+) {
+  const vault = read(contract, account);
+  vault.links[String(giftId)] = link;
+  write(contract, account, vault);
+}
+
+export function forgetLink(contract: string, account: string, giftId: number) {
+  const vault = read(contract, account);
+  delete vault.links[String(giftId)];
+  write(contract, account, vault);
 }
 
 export function pendingOf(contract: string, account: string) {

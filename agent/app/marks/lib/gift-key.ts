@@ -6,7 +6,9 @@ const NOTE_INFO = new TextEncoder().encode("marks-gift-note");
 export const MAX_NOTE_BYTES = 512;
 
 export function toHex(bytes: Uint8Array) {
-  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join(
+    "",
+  );
 }
 
 export function fromHex(hex: string) {
@@ -23,7 +25,9 @@ export type ClaimKey = { secret: string; claimKey: string; keyProof: string };
 /** A one-time key, the public half, and a proof that the sender holds it. */
 export function newClaimKey(contract: string, sender: string): ClaimKey {
   const secret = ed25519.utils.randomPrivateKey();
-  const message = new TextEncoder().encode(`marks-gift-register:${contract}:${sender}`);
+  const message = new TextEncoder().encode(
+    `marks-gift-register:${contract}:${sender}`,
+  );
   return {
     secret: toHex(secret),
     claimKey: toHex(ed25519.getPublicKey(secret)),
@@ -42,14 +46,27 @@ export function claimSignature(
   giftId: number,
   recipient: string,
 ) {
-  const message = new TextEncoder().encode(`marks-gift-claim:${contract}:${giftId}:${recipient}`);
+  const message = new TextEncoder().encode(
+    `marks-gift-claim:${contract}:${giftId}:${recipient}`,
+  );
   return toHex(ed25519.sign(message, fromHex(secret)));
 }
 
 async function noteKey(secret: string) {
-  const base = await crypto.subtle.importKey("raw", fromHex(secret), "HKDF", false, ["deriveKey"]);
+  const base = await crypto.subtle.importKey(
+    "raw",
+    fromHex(secret),
+    "HKDF",
+    false,
+    ["deriveKey"],
+  );
   return crypto.subtle.deriveKey(
-    { name: "HKDF", hash: "SHA-256", salt: new Uint8Array(32), info: NOTE_INFO },
+    {
+      name: "HKDF",
+      hash: "SHA-256",
+      salt: new Uint8Array(32),
+      info: NOTE_INFO,
+    },
     base,
     { name: "AES-GCM", length: 256 },
     false,
