@@ -35,21 +35,37 @@ export function marginShortfall(input: {
   const filled = applyFill(held, input.side, input.lots, input.orderQuote);
   const resting: Held = {
     ...held,
-    openBidLots: held.openBidLots + (input.side === "bid" ? input.lots : BigInt(0)),
-    openAskLots: held.openAskLots + (input.side === "ask" ? input.lots : BigInt(0)),
+    openBidLots:
+      held.openBidLots + (input.side === "bid" ? input.lots : BigInt(0)),
+    openAskLots:
+      held.openAskLots + (input.side === "ask" ? input.lots : BigInt(0)),
   };
-  const filledNeed = filled ? requirementGap(filled, input.markQuote, input.initialBps) : BigInt(0);
-  const restingNeed = requirementGap(resting, input.markQuote, input.initialBps);
+  const filledNeed = filled
+    ? requirementGap(filled, input.markQuote, input.initialBps)
+    : BigInt(0);
+  const restingNeed = requirementGap(
+    resting,
+    input.markQuote,
+    input.initialBps,
+  );
   return filledNeed > restingNeed ? filledNeed : restingNeed;
 }
 
-function requirementGap(account: Held, markQuote: bigint, initialBps: number): bigint {
+function requirementGap(
+  account: Held,
+  markQuote: bigint,
+  initialBps: number,
+): bigint {
   const unrealized =
     account.baseLots === BigInt(0)
       ? BigInt(0)
       : account.baseLots * (markQuote - account.entryQuote);
   const equity = account.collateral + unrealized - account.debt;
-  const exposure = worstLots(account.baseLots, account.openBidLots, account.openAskLots);
+  const exposure = worstLots(
+    account.baseLots,
+    account.openBidLots,
+    account.openAskLots,
+  );
   const initial = (exposure * markQuote * BigInt(initialBps)) / BigInt(10000);
   return equity >= initial ? BigInt(0) : initial - equity;
 }
@@ -65,7 +81,12 @@ function abs(value: bigint) {
 }
 
 /** Mirrors `math::apply_fill`, including realized pnl landing in collateral. */
-function applyFill(account: Held, side: Side, lots: bigint, quote: bigint): Held | null {
+function applyFill(
+  account: Held,
+  side: Side,
+  lots: bigint,
+  quote: bigint,
+): Held | null {
   if (lots <= BigInt(0)) return null;
   const delta = side === "bid" ? lots : -lots;
   if (account.baseLots === BigInt(0)) {
@@ -78,7 +99,11 @@ function applyFill(account: Held, side: Side, lots: bigint, quote: bigint): Held
     const oldAbs = abs(account.baseLots);
     const newAbs = oldAbs + lots;
     const entry = (oldAbs * account.entryQuote + lots * quote) / newAbs;
-    return { ...account, baseLots: account.baseLots + delta, entryQuote: entry };
+    return {
+      ...account,
+      baseLots: account.baseLots + delta,
+      entryQuote: entry,
+    };
   }
   const oldAbs = abs(account.baseLots);
   const close = oldAbs < lots ? oldAbs : lots;
@@ -91,7 +116,12 @@ function applyFill(account: Held, side: Side, lots: bigint, quote: bigint): Held
     return { ...account, collateral, baseLots: account.baseLots + delta };
   }
   if (lots === oldAbs) {
-    return { ...account, collateral, baseLots: BigInt(0), entryQuote: BigInt(0) };
+    return {
+      ...account,
+      collateral,
+      baseLots: BigInt(0),
+      entryQuote: BigInt(0),
+    };
   }
   const remainder = lots - oldAbs;
   return {

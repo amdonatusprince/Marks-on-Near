@@ -1,6 +1,4 @@
-"use client";
-
-import { useToast } from "@/components/toast";
+import { useToast } from "@/marks/components/toast";
 import { useState } from "react";
 
 export function DepositPanel() {
@@ -12,9 +10,9 @@ export function DepositPanel() {
     <section className="space-y-4">
       <h2 className="text-sm font-medium">Deposit from another chain</h2>
       <p className="max-w-prose text-sm text-muted-foreground">
-        NEAR Intents has no testnet. This asks 1Click for a quote from USDC on Arbitrum into USDC on
-        NEAR. The default is a dry quote, which spends nothing and does not return a deposit
-        address.
+        NEAR Intents has no testnet. This asks 1Click for a quote from USDC on
+        Arbitrum into USDC on NEAR. The default is a dry quote, which spends
+        nothing and does not return a deposit address.
       </p>
       <label className="flex items-center gap-2 text-sm">
         <input
@@ -47,7 +45,9 @@ export function DepositPanel() {
               toast.success(`Output amount ${body.quote.amountOut}`);
             })
             .catch((caught) =>
-              toast.error(caught instanceof Error ? caught.message : "The quote failed"),
+              toast.error(
+                caught instanceof Error ? caught.message : "The quote failed",
+              ),
             )
             .finally(() => setBusy(false));
         }}
