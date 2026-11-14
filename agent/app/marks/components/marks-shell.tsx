@@ -18,6 +18,8 @@ export const MARKS_PATHS = [
   "/markets",
   "/stocks",
   "/borrow",
+  "/pay",
+  "/checkout",
   "/portfolio",
   "/send",
   "/faucet",
@@ -36,6 +38,7 @@ const FOOTER_LINKS = [
   ["/markets", "Perps"],
   ["/stocks", "Stocks"],
   ["/borrow", "Borrow"],
+  ["/pay", "Pay"],
   ["/send", "Send a gift"],
   ["/faucet", "Faucet"],
 ] as const;
@@ -66,11 +69,15 @@ export function MarksShell({ children }: { children: ReactNode }) {
 }
 
 function MarksFooter() {
-  const { account } = useNear();
+  const { account, network } = useNear();
   return (
     <footer className="relative z-[1] shrink-0 border-t border-line">
       <div className="mx-auto flex max-w-[1440px] flex-col gap-2 px-4 py-6 text-sm text-ink-muted sm:flex-row sm:items-center sm:justify-between md:px-6">
-        <p>Marks runs on NEAR testnet with mock USDC from the faucet.</p>
+        <p>
+          {network === "mainnet"
+            ? "Signed in on NEAR mainnet. Marks trades stay on testnet."
+            : "Marks runs on NEAR testnet with mock USDC from the faucet."}
+        </p>
         {account ? (
           <nav aria-label="Footer" className="flex flex-wrap gap-x-5 gap-y-1">
             {FOOTER_LINKS.map(([href, label]) => (

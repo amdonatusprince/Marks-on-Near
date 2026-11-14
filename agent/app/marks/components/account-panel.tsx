@@ -1,5 +1,6 @@
 import { DepositPanel } from "@/marks/components/deposit-panel";
 import { useNotify, useToast } from "@/marks/components/toast";
+import { Spinner } from "@/marks/components/v2-ui";
 import { atomsFromDollars, grouped, money } from "@/marks/lib/format";
 import Link from "@/marks/components/link";
 import { cancelOrder, commitMargin } from "@/marks/lib/desk-writes";
@@ -123,10 +124,7 @@ function Position({
         The position could not be loaded.
       </p>
     );
-  if (!trader)
-    return (
-      <p className="text-sm text-muted-foreground">Reading the account…</p>
-    );
+  if (!trader) return <Spinner />;
   const side =
     trader.base_lots > 0 ? "Long" : trader.base_lots < 0 ? "Short" : "Flat";
   return (
@@ -226,11 +224,14 @@ function Orders({
   const id = useId();
   return (
     <div className="space-y-4">
-      <p className="text-sm text-muted-foreground">
-        {trader
-          ? `Open bids ${grouped(trader.open_bid_lots)}. Open asks ${grouped(trader.open_ask_lots)}.`
-          : "Reading open size…"}
-      </p>
+      {!trader ? (
+        <Spinner />
+      ) : (
+        <p className="text-sm text-muted-foreground">
+          Open bids {grouped(trader.open_bid_lots)}. Open asks{" "}
+          {grouped(trader.open_ask_lots)}.
+        </p>
+      )}
       <form
         className="space-y-2"
         onSubmit={(event) => {

@@ -4,6 +4,7 @@ import { useNotify } from "@/marks/components/toast";
 import "@/marks/components/marks/certificate.css";
 import "@/marks/components/marks/send.css";
 import { RefreshPrice } from "@/marks/components/stocks-desk";
+import { Pager } from "@/marks/components/v2-ui";
 import { figures, grouped, money } from "@/marks/lib/format";
 import { submitGift } from "@/marks/lib/create-gift";
 import { cancelGift } from "@/marks/lib/desk-writes";
@@ -708,6 +709,8 @@ function describe(asset: GiftAsset) {
   return asset.symbol;
 }
 
+const GIFT_PAGE = 5;
+
 const CHIPS: Record<Gift["status"], { text: string; tone: string } | null> = {
   open: null,
   claimed: { text: "OPENED", tone: "opened" },
@@ -734,6 +737,8 @@ function MyGifts({
   const [copied, setCopied] = useState<number | null>(null);
   const [busy, setBusy] = useState<number | null>(null);
   const [note, setNote] = useState<{ id: number; text: string } | null>(null);
+  const [sentPage, setSentPage] = useState(0);
+  const [receivedPage, setReceivedPage] = useState(0);
 
   const load = useCallback(async () => {
     const [out, into] = await Promise.all([
@@ -820,6 +825,18 @@ function MyGifts({
 
   if (!sent || (sent.length === 0 && received.length === 0)) return null;
   const now = Date.now() * 1e6;
+  const sentPages = Math.max(1, Math.ceil(sent.length / GIFT_PAGE));
+  const sentCurrent = Math.min(sentPage, sentPages - 1);
+  const sentShown = sent.slice(
+    sentCurrent * GIFT_PAGE,
+    sentCurrent * GIFT_PAGE + GIFT_PAGE,
+  );
+  const receivedPages = Math.max(1, Math.ceil(received.length / GIFT_PAGE));
+  const receivedCurrent = Math.min(receivedPage, receivedPages - 1);
+  const receivedShown = received.slice(
+    receivedCurrent * GIFT_PAGE,
+    receivedCurrent * GIFT_PAGE + GIFT_PAGE,
+  );
 
   return (
     <section className="send-gifts send-rise" aria-label="Your gifts">
@@ -827,7 +844,7 @@ function MyGifts({
         <>
           <p className="send-label">GIFTS YOU SENT</p>
           <ul className="send-gift-list">
-            {sent.map((gift) => {
+            {sentShown.map((gift) => {
               const chip = CHIPS[gift.status];
               const link = links[String(gift.id)];
               const expired = gift.status === "open" && gift.expiry_ns <= now;
@@ -883,13 +900,19 @@ function MyGifts({
               );
             })}
           </ul>
+          <Pager
+            page={sentCurrent}
+            pages={sentPages}
+            onPage={setSentPage}
+            label="Gifts you sent"
+          />
         </>
       ) : null}
       {received.length > 0 ? (
         <>
           <p className="send-label mt-10">GIFTS YOU OPENED</p>
           <ul className="send-gift-list">
-            {received.map((gift) => (
+            {receivedShown.map((gift) => (
               <li className="send-gift" key={gift.id}>
                 <span className="send-gift-id">#{gift.id}</span>
                 <span className="send-gift-symbol">{describe(gift.asset)}</span>
@@ -897,6 +920,12 @@ function MyGifts({
               </li>
             ))}
           </ul>
+          <Pager
+            page={receivedCurrent}
+            pages={receivedPages}
+            onPage={setReceivedPage}
+            label="Gifts you opened"
+          />
         </>
       ) : null}
     </section>

@@ -2,7 +2,12 @@
 const google = () => import("@/marks/lib/google-auth");
 import { functionCall } from "near-api-js/lib/transaction";
 import { installNightlyRelay, setNightlyNetwork } from "@/marks/lib/nightly";
-import { NETWORK_COOKIE, rpcUrl, type Network } from "@/marks/lib/network";
+import {
+  NETWORK_COOKIE,
+  readStoredNetwork,
+  rpcUrl,
+  type Network,
+} from "@/marks/lib/network";
 import { contractId } from "@/marks/lib/rpc-client";
 import {
   createContext,
@@ -163,6 +168,11 @@ export function NearProvider({
 }) {
   const router = useRouter();
   const [network, setNetworkState] = useState<Network>(initialNetwork);
+
+  useEffect(() => {
+    const saved = readStoredNetwork();
+    if (saved !== initialNetwork) setNetworkState(saved);
+  }, [initialNetwork]);
   const [account, setAccount] = useState<string | null>(null);
   const [session, setSession] = useState<Session>(null);
   const sessionRef = useRef<Session>(null);
@@ -237,7 +247,6 @@ export function NearProvider({
       error,
       setNetwork: async (next) => {
         if (next === network) return;
-        setDialogOpen(false);
         setError("");
         const current = await connector(network);
         await current.disconnect().catch(() => undefined);
@@ -261,7 +270,7 @@ export function NearProvider({
           if (choice === "google") {
             if (network !== "testnet") {
               setError(
-                "Google sign-in is available on testnet. Switch the header to testnet.",
+                "Google sign-in is on testnet. Choose testnet, then continue with Google.",
               );
               return;
             }

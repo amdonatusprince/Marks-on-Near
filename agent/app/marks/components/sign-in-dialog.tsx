@@ -13,8 +13,15 @@ const chains = [
 ] as const;
 
 export function SignInDialog() {
-  const { dialogOpen, closeDialog, signIn, error, network, pending } =
-    useNear();
+  const {
+    dialogOpen,
+    closeDialog,
+    signIn,
+    error,
+    network,
+    setNetwork,
+    pending,
+  } = useNear();
   const titleId = useId();
   const passkeyRef = useRef<HTMLButtonElement>(null);
   useNotify(error);
@@ -50,6 +57,38 @@ export function SignInDialog() {
         </h2>
         <p className="mt-2 text-sm text-muted-foreground">
           Use a passkey, a Google account, or connect a wallet.
+        </p>
+        <div
+          className="mt-4 grid grid-cols-2 gap-2"
+          role="group"
+          aria-label="Network"
+        >
+          {(
+            [
+              ["mainnet", "Mainnet"],
+              ["testnet", "Testnet"],
+            ] as const
+          ).map(([id, label]) => (
+            <button
+              key={id}
+              type="button"
+              aria-pressed={network === id}
+              disabled={pending}
+              className={`min-h-11 rounded-lg border px-3 py-2 text-sm font-medium focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card disabled:opacity-60 ${
+                network === id
+                  ? "border-ring bg-muted"
+                  : "border-border bg-background"
+              }`}
+              onClick={() => void setNetwork(id)}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        <p className="mt-2 text-sm text-muted-foreground">
+          {network === "mainnet"
+            ? "Wallets sign in on NEAR mainnet. A payment link pays this account."
+            : "Wallets sign in on NEAR testnet. Marks trades use mock USDC."}
         </p>
         <details className="mt-2 text-sm">
           <summary className="cursor-pointer text-muted-foreground underline-offset-4 hover:underline focus-visible:ring-2 focus-visible:ring-ring">
@@ -97,7 +136,9 @@ export function SignInDialog() {
             <span className="mt-1 block text-sm text-muted-foreground">
               {pending
                 ? "Opening NEAR Auth…"
-                : "Sign in through NEAR Auth on testnet."}
+                : network === "mainnet"
+                  ? "Google sign-in is on testnet. Switch above to use it."
+                  : "Sign in through NEAR Auth on testnet."}
             </span>
           </span>
         </button>

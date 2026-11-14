@@ -1,4 +1,4 @@
-import { BalanceStrip, Stat } from "@/marks/components/v2-ui";
+import { BalanceStrip, Stat, Spinner } from "@/marks/components/v2-ui";
 import { grouped, money } from "@/marks/lib/format";
 import { useNear } from "@/marks/lib/near";
 import type { Market, Trader } from "@/marks/lib/rpc";
@@ -269,11 +269,13 @@ export function PortfolioDesk({
       <div className="panel flex flex-wrap items-center justify-between gap-4 p-5">
         <div>
           <p className="label-mono">Gifts</p>
-          <p className="mt-1">
-            {book
-              ? `${book.sent.length} sent · ${book.received.length} opened by you`
-              : "Reading gifts…"}
-          </p>
+          {book ? (
+            <p className="mt-1">
+              {book.sent.length} sent · {book.received.length} opened by you
+            </p>
+          ) : (
+            <Spinner />
+          )}
         </div>
         <Link className="btn-line text-sm" href="/send">
           Send or manage gifts
@@ -307,7 +309,7 @@ function Section({
         </Link>
       </header>
       {rows === null ? (
-        <p className="p-4 text-sm text-ink-muted">Reading…</p>
+        <Spinner />
       ) : rows === 0 ? (
         <p className="p-4 text-sm text-ink-muted">{empty}</p>
       ) : (

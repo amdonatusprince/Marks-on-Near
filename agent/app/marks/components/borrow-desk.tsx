@@ -3,6 +3,7 @@ import {
   BalanceStrip,
   Row,
   Stat,
+  Spinner,
   Tabs,
   TxNote,
 } from "@/marks/components/v2-ui";
@@ -176,8 +177,7 @@ function PerpLoans({
       </div>
     );
   }
-  if (!held)
-    return <p className="text-sm text-ink-muted">Reading your positions…</p>;
+  if (!held) return <Spinner />;
   if (held.length === 0) {
     return (
       <div className="panel space-y-3 p-5">

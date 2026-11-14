@@ -2,6 +2,14 @@ export type Network = "testnet" | "mainnet";
 
 export const NETWORK_COOKIE = "marks-network";
 
+export function readStoredNetwork(): Network {
+  if (typeof document === "undefined") return "testnet";
+  const match = document.cookie.match(
+    new RegExp(`(?:^|;\\s*)${NETWORK_COOKIE}=(testnet|mainnet)(?:;|$)`),
+  );
+  return match?.[1] === "mainnet" ? "mainnet" : "testnet";
+}
+
 const env = import.meta.env;
 
 // Page HTML and loader data are one shared CDN copy for every visitor, so
