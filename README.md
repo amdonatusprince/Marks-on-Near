@@ -36,13 +36,13 @@ For a fast, non-interactive verification:
 npm run format:check
 cd agent && pnpm typecheck && pnpm agent-native:doctor
 cd ..
-cargo test --manifest-path contract/Cargo.toml   # 75 tests
+cargo test --manifest-path contract/Cargo.toml   # 82 tests
 cargo test --manifest-path token/Cargo.toml      # 7 tests
 cargo test --manifest-path oracle/Cargo.toml     # 4 tests
 docker build --platform linux/amd64 -t marks .
 ```
 
-The CI workflow runs Prettier, the app typecheck, Rust formatting and all 86 Rust tests on every push and pull request.
+The CI workflow runs Prettier, the app typecheck, Rust formatting and all 93 Rust tests on every push and pull request.
 
 ## Architecture
 
@@ -58,6 +58,9 @@ flowchart LR
   Pool["Marks lending pool"] --> Borrow
   Borrow --> Balance
   Balance --> Gifts["Gift escrow"]
+  Balance --> Bills["Pay a bill"]
+  Perps --> Bills
+  Shares --> Bills
   Shares --> Gifts
   Perps --> Gifts
   Gifts -->|"the link key signs the recipient"| Friend["Friend's account"]
@@ -269,7 +272,7 @@ Deploy, funding, and one live pass of every flow. The seed is a few hundred more
 ## Run it
 
 ```sh
-cargo test --manifest-path contract/Cargo.toml   # 75 tests
+cargo test --manifest-path contract/Cargo.toml   # 82 tests
 cargo test --manifest-path token/Cargo.toml
 cargo test --manifest-path oracle/Cargo.toml
 npm run format:check
@@ -345,6 +348,8 @@ See [Quick start](#quick-start) for a fresh checkout. Existing maintainers can r
 | `/markets/:symbol` | Live candles at 1m, 15m, 1h and 1D, a live book, a ticket with the liquidation price, and "Borrow against this position". NEAR, SOL, ETH and BTC tick on every Coinbase trade. The other markets refresh every 4 seconds |
 | `/stocks`          | Buy and sell shares, and a call picker with expiry, premium, break-even, worst case and best case                                                                                                                        |
 | `/borrow`          | Perp and share loans, with the debt and the liquidation price before and after                                                                                                                                           |
+| `/pay`             | Create a payment link for an amount. The link pays the signed-in account                                                                                                                                                 |
+| `/checkout`        | The page a payment link opens. Pay the amount from the Marks balance, borrow the shortfall against a perp or shares, or pay on mainnet through NEAR Intents                                                              |
 | `/send`            | Send a share, USDC or a position, with a live certificate preview, the fee, the link, and every gift you sent                                                                                                            |
 | `/g/:id`           | The claim page: envelope, certificate, Google sign-in, the sealed note                                                                                                                                                   |
 | `/portfolio`       | Balances, positions, shares, loans, calls and gifts in one place                                                                                                                                                         |
@@ -397,7 +402,7 @@ flowchart LR
   person --> chat[Agent panel]
   chat --> reads[list-markets, get-market, get-account, list-shares, day-trade, plan-order]
   reads --> rpc[FastNEAR RPC]
-  chat --> writes[place-order, send-gift, claim-gift, refund-gift, trade-shares, borrow-usdc, cancel-order, move-usdc, place-option, settle-option]
+  chat --> writes[place-order, send-gift, claim-gift, refund-gift, trade-shares, borrow-usdc, pay-bill, cancel-order, move-usdc, place-option, settle-option]
   chat --> session[Browser session: Marks desk]
   session --> nav[open-market, fill-ticket]
   writes --> session
@@ -407,16 +412,17 @@ flowchart LR
   wallet --> marks[marks2-6e889d.testnet]
 ```
 
-| Page               | What you ask in chat                     | Action                                                                                                                                         |
-| ------------------ | ---------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| `/markets/:symbol` | Plan and place a perp                    | `plan-order`, then `place-order`. `fill-ticket` fills the ticket without placing. `open-market` moves the desk. `cancel-order` cancels a rest. |
-| `/stocks`          | Buy or sell a share                      | `list-shares`, then `trade-shares`                                                                                                             |
-| `/stocks`          | Buy, write or settle a call              | `list-shares`, then `place-option` or `settle-option`                                                                                          |
-| `/borrow`          | Borrow or repay against a perp or shares | `borrow-usdc`                                                                                                                                  |
-| `/send`            | Gift USDC, shares or a position          | `send-gift`. The chat returns the claim link. `refund-gift` revokes an open one. The link stops working.                                       |
-| `/g/:id`           | Open the gift in the current link        | `claim-gift`. The secret stays in the URL hash and the recipient account is bound into the claim signature.                                    |
-| `/faucet`          | Claim 1,000 mUSDC, deposit or withdraw   | `move-usdc`                                                                                                                                    |
-| `/portfolio`       | How this account is doing                | `get-account` (balances, positions, shares, gifts sent, no claim secrets)                                                                      |
+| Page               | What you ask in chat                        | Action                                                                                                                                         |
+| ------------------ | ------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `/markets/:symbol` | Plan and place a perp                       | `plan-order`, then `place-order`. `fill-ticket` fills the ticket without placing. `open-market` moves the desk. `cancel-order` cancels a rest. |
+| `/stocks`          | Buy or sell a share                         | `list-shares`, then `trade-shares`                                                                                                             |
+| `/stocks`          | Buy, write or settle a call                 | `list-shares`, then `place-option` or `settle-option`                                                                                          |
+| `/borrow`          | Borrow or repay against a perp or shares    | `borrow-usdc`                                                                                                                                  |
+| `/checkout`        | Pay a payment link, borrowing the shortfall | `pay-bill`                                                                                                                                     |
+| `/send`            | Gift USDC, shares or a position             | `send-gift`. The chat returns the claim link. `refund-gift` revokes an open one. The link stops working.                                       |
+| `/g/:id`           | Open the gift in the current link           | `claim-gift`. The secret stays in the URL hash and the recipient account is bound into the claim signature.                                    |
+| `/faucet`          | Claim 1,000 mUSDC, deposit or withdraw      | `move-usdc`                                                                                                                                    |
+| `/portfolio`       | How this account is doing                   | `get-account` (balances, positions, shares, gifts sent, no claim secrets)                                                                      |
 
 The panel is the Agent-Native `AgentSidebar` in the Marks layout. The tab registers itself as a browser session named "Marks desk". The full chat is at `/chat` and settings at `/settings`.
 
@@ -432,7 +438,7 @@ The Marks pages are public. Pressing **Agent** signed out goes to the agent sign
 ## Limits
 
 - **Shares are Marks ledger entries on testnet.** A share is a balance inside the contract, bought and sold at the oracle price against a desk funded with mUSDC. No share of Apple or Nvidia stands behind it.
-- **Intents runs on mainnet only.** It is how a deposit arrives from another chain and how a withdrawal leaves. `scripts/intents-quote.sh` asks 1Click for a dry quote and does not send funds.
+- **Intents runs on mainnet only.** A payment link opens `/checkout`. Paying with Marks moves testnet mUSDC. Paying from another chain asks 1Click for an exact USDC payment and returns a live mainnet deposit address. Marks does not custody that payment. The faucet's cross-chain panel still defaults to a dry quote.
 - **Prices gap over weekends.** Stock and metal prints stop when their markets close. A share buy and a perp order that adds risk wait for a print from the last hour. The two-print rule follows a Monday gap after two agreeing prints, and liquidations then run at the new mark.
 - **A call settles on the first print after expiry.** A series that expires over a weekend settles on Monday's first print.
 - **A position gift can be liquidated before it is claimed.** The gift becomes void and the fee stays spent.
