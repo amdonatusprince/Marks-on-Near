@@ -1,5 +1,5 @@
-import { repoRoot } from "@/lib/auth-script";
-import { rpcUrl } from "@/lib/network";
+import { MARKS_CONTRACT, MARKS_RPC } from "../../shared/marks";
+import { repoRoot } from "./auth-script";
 import { spawn } from "child_process";
 import { readFileSync } from "fs";
 import { access } from "fs/promises";
@@ -21,7 +21,8 @@ type Market = { symbol: string; mark_updated_ns: string };
 export function startKeeper() {
   if (state.marksKeeper || process.env.MARKS_KEEPER === "off") return;
   state.marksKeeper = true;
-  const account = process.env.MARKS_KEEPER_ACCOUNT?.trim();
+  const account =
+    process.env.MARKS_KEEPER_ACCOUNT?.trim() || process.env.AGENT_ID?.trim();
   const secret = process.env.MARKS_KEEPER_KEY?.trim();
   if (account && secret) {
     if (shellKeeperRunning()) {
@@ -37,7 +38,9 @@ export function startKeeper() {
 
 function shellKeeperRunning() {
   try {
-    const pid = Number(readFileSync(path.join(os.tmpdir(), "marks-v2-keep.pid"), "utf8").trim());
+    const pid = Number(
+      readFileSync(path.join(os.tmpdir(), "marks-v2-keep.pid"), "utf8").trim(),
+    );
     if (!pid) return false;
     process.kill(pid, 0);
     return true;
@@ -49,7 +52,10 @@ function shellKeeperRunning() {
 async function loop(account: string, secret: string) {
   for (;;) {
     const wait = await tick(account, secret).catch((caught) => {
-      console.error("[marks-keep]", caught instanceof Error ? caught.message : caught);
+      console.error(
+        "[marks-keep]",
+        caught instanceof Error ? caught.message : caught,
+      );
       return 300_000;
     });
     await new Promise((resolve) => setTimeout(resolve, wait));
@@ -57,8 +63,7 @@ async function loop(account: string, secret: string) {
 }
 
 async function tick(account: string, secret: string) {
-  const contract = process.env.NEXT_PUBLIC_CONTRACT_ID?.trim();
-  if (!contract) throw new Error("NEXT_PUBLIC_CONTRACT_ID is not set");
+  const contract = MARKS_CONTRACT;
   const rows = await markets(contract);
   const oldest = rows.reduce((age, row) => Math.max(age, row.ageSec), 0);
   if (rows.length === 0) return 300_000;
@@ -112,7 +117,7 @@ async function nearAccount(account: string, secret: string) {
   const key = KeyPair.fromString(trimmed as `ed25519:${string}`);
   return new Account(
     account,
-    new JsonRpcProvider({ url: rpcUrl("testnet") }),
+    new JsonRpcProvider({ url: MARKS_RPC }),
     KeyPairSigner.fromSecretKey(key.toString()),
   );
 }
@@ -130,7 +135,10 @@ async function markets(contract: string) {
   const now = Date.now() * 1_000_000;
   return listed.map((market) => ({
     symbol: market.symbol,
-    ageSec: Math.max(0, Math.round((now - Number(market.mark_updated_ns)) / 1_000_000_000)),
+    ageSec: Math.max(
+      0,
+      Math.round((now - Number(market.mark_updated_ns)) / 1_000_000_000),
+    ),
   }));
 }
 
@@ -144,13 +152,21 @@ async function yocto(account: string) {
 }
 
 async function rpcQuery(params: object) {
-  const response = await fetch(rpcUrl("testnet"), {
+  const response = await fetch(MARKS_RPC, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ jsonrpc: "2.0", id: "marks-keep", method: "query", params }),
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      id: "marks-keep",
+      method: "query",
+      params,
+    }),
   });
   if (!response.ok) throw new Error(`RPC returned ${response.status}`);
-  const body = (await response.json()) as { error?: { message?: string }; result?: unknown };
+  const body = (await response.json()) as {
+    error?: { message?: string };
+    result?: unknown;
+  };
   if (body.error) throw new Error(body.error.message || "RPC query failed");
   return body.result;
 }
@@ -161,7 +177,7 @@ async function spawnScript() {
     await access(script);
   } catch {
     console.error(
-      "[marks-keep] set MARKS_KEEPER_ACCOUNT and MARKS_KEEPER_KEY on the server. The Mac keychain is not part of the deploy.",
+      "[marks-keep] set AGENT_ID and MARKS_KEEPER_KEY on the server. The Mac keychain is not part of the deploy.",
     );
     return;
   }
