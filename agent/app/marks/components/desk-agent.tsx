@@ -138,6 +138,7 @@ export function DeskAgent() {
           "trade-shares",
           "refresh-price",
           "borrow-usdc",
+          "pay-bill",
           "cancel-order",
           "commit-margin",
           "move-usdc",

@@ -19,6 +19,7 @@ import {
   claimSettlement,
   commitMargin,
   depositToMarks,
+  payBill,
   placeOption,
   refreshMark,
   refreshShare,
@@ -833,6 +834,89 @@ export function deskActions(
             atoms,
           );
           return signed(tx, "Borrowed against shares.");
+        });
+      },
+    }),
+    defineClientAction<
+      {
+        amount: string;
+        source: string;
+        merchant?: string;
+        paymentId?: string;
+        label?: string;
+        borrowed?: string;
+      },
+      Queued
+    >({
+      name: "pay-bill",
+      title: "Pay a Marks bill",
+      description:
+        "Pay a testnet mUSDC checkout. amount is dollars. merchant is who receives it. source is balance, perp:SOL-PERP, or share:aapl. The contract borrows only the shortfall against that source and pays the merchant in one signature.",
+      schema: {
+        type: "object",
+        properties: {
+          amount: { type: "string", description: "USDC dollars, such as 40." },
+          source: { type: "string" },
+          merchant: {
+            type: "string",
+            description: "NEAR account that receives the payment.",
+          },
+          paymentId: {
+            type: "string",
+            description:
+              "Payment link id. After the signature, that link is marked paid.",
+          },
+          label: { type: "string" },
+          borrowed: { type: "string" },
+        },
+        required: ["amount", "source", "merchant"],
+      },
+      run: (args) => {
+        const wallet = get();
+        const account = needAccount(wallet);
+        const atoms = dollarsAtoms(String(args.amount), "the bill");
+        const source = String(args.source);
+        const merchant = String(args.merchant ?? "")
+          .trim()
+          .toLowerCase();
+        if (!merchant) throw new Error("Name the account that gets paid.");
+        return queue("pay-bill", async (signing) => {
+          await confirm(
+            {
+              title: args.label ? `Pay ${args.label}?` : "Pay this bill?",
+              rows: [
+                { label: "Bill", value: money(atoms) },
+                { label: "From", value: source },
+                {
+                  label: "Borrows",
+                  value: (() => {
+                    const borrowed = atomsFromDollars(
+                      String(args.borrowed ?? "0"),
+                    );
+                    return borrowed && borrowed > ZERO
+                      ? money(borrowed)
+                      : "Nothing";
+                  })(),
+                },
+                { label: "To", value: merchant },
+              ],
+            },
+            signing,
+          );
+          const tx = await payBill(wallet.send, merchant, atoms, source);
+          const paymentId = String(args.paymentId ?? "");
+          if (paymentId) {
+            void fetch("/api/checkout/paid", {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({
+                id: paymentId,
+                hash: tx,
+                account,
+              }),
+            }).catch(() => undefined);
+          }
+          return signed(tx, "Bill paid.");
         });
       },
     }),
