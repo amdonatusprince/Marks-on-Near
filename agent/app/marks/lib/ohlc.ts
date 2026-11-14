@@ -9,7 +9,10 @@ export type CandleBar = {
 
 export type CandleSpan = "1m" | "15m" | "1h" | "1d";
 
-const SPANS: Record<CandleSpan, { yahoo: string; range: string; note: string }> = {
+const SPANS: Record<
+  CandleSpan,
+  { yahoo: string; range: string; note: string }
+> = {
   "1m": { yahoo: "1m", range: "1d", note: "1 minute candles" },
   "15m": { yahoo: "15m", range: "5d", note: "15 minute candles" },
   "1h": { yahoo: "1h", range: "3mo", note: "1 hour candles" },
@@ -31,7 +34,10 @@ const LISTINGS: Record<string, { id: string; size: number }> = {
   amzn: { id: "AMZN", size: 1 },
 };
 
-const cache = new Map<string, { at: number; candles: CandleBar[]; note: string }>();
+const cache = new Map<
+  string,
+  { at: number; candles: CandleBar[]; note: string }
+>();
 
 export const SPAN_SECONDS: Record<CandleSpan, number> = {
   "1m": 60,
@@ -41,8 +47,15 @@ export const SPAN_SECONDS: Record<CandleSpan, number> = {
 };
 
 /** Coinbase's public ticker for the assets it lists, with Marks' contract size. */
-export function streamFor(assetId: string): { product: string; size: number } | null {
-  const product = { near: "NEAR-USD", sol: "SOL-USD", eth: "ETH-USD", btc: "BTC-USD" }[assetId];
+export function streamFor(
+  assetId: string,
+): { product: string; size: number } | null {
+  const product = {
+    near: "NEAR-USD",
+    sol: "SOL-USD",
+    eth: "ETH-USD",
+    btc: "BTC-USD",
+  }[assetId];
   const listing = LISTINGS[assetId];
   return product && listing ? { product, size: listing.size } : null;
 }
@@ -66,7 +79,12 @@ export async function chartCandles(
   const chosen = SPANS[span];
   if (listing) {
     try {
-      const candles = await yahooCandles(listing.id, listing.size, chosen.yahoo, chosen.range);
+      const candles = await yahooCandles(
+        listing.id,
+        listing.size,
+        chosen.yahoo,
+        chosen.range,
+      );
       if (candles.length >= 2) {
         cache.set(key, { at: Date.now(), candles, note: chosen.note });
         return { candles, note: chosen.note };
@@ -76,15 +94,25 @@ export async function chartCandles(
     }
   }
   if (span === "15m") {
-    return { candles: candlesFromPrints(prints), note: "Recent prints from the price feed" };
+    return {
+      candles: candlesFromPrints(prints),
+      note: "Recent prints from the price feed",
+    };
   }
   return { candles: [], note: `No ${chosen.note} right now` };
 }
 
-async function yahooCandles(symbol: string, size: number, interval: string, range: string) {
+async function yahooCandles(
+  symbol: string,
+  size: number,
+  interval: string,
+  range: string,
+) {
   const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=${interval}&range=${range}`;
   const body = (await readJson(url)) as {
-    chart?: { result?: { timestamp?: number[]; indicators?: { quote?: Quote[] } }[] };
+    chart?: {
+      result?: { timestamp?: number[]; indicators?: { quote?: Quote[] } }[];
+    };
   };
   const result = body.chart?.result?.[0];
   const quote = result?.indicators?.quote?.[0];
@@ -93,7 +121,7 @@ async function yahooCandles(symbol: string, size: number, interval: string, rang
   const candles: CandleBar[] = [];
   const traded: CandleBar[] = [];
   for (let index = 0; index < stamps.length; index += 1) {
-    const bar = barFrom(quote, index, stamps[index] * 1000, size);
+    const bar = barFrom(quote, index, (stamps[index] ?? 0) * 1000, size);
     if (!bar) continue;
     candles.push(bar);
     if (BigInt(bar.volume) > BigInt(0)) traded.push(bar);
@@ -157,10 +185,12 @@ function candlesFromPrints(prints: { time: number; atoms: string }[]) {
     const prices = slice.map((print) => BigInt(print.atoms));
     const open = prices[0];
     const close = prices[prices.length - 1];
+    const first = slice[0];
+    if (open === undefined || close === undefined || !first) continue;
     const high = prices.reduce((max, value) => (value > max ? value : max));
     const low = prices.reduce((min, value) => (value < min ? value : min));
     candles.push({
-      time: slice[0].time,
+      time: first.time,
       open: open.toString(),
       high: high.toString(),
       low: low.toString(),
@@ -173,7 +203,10 @@ function candlesFromPrints(prints: { time: number; atoms: string }[]) {
 
 async function readJson(url: string) {
   const response = await fetch(url, {
-    headers: { accept: "application/json", "user-agent": "marks-demo-feed/1.0" },
+    headers: {
+      accept: "application/json",
+      "user-agent": "marks-demo-feed/1.0",
+    },
     signal: AbortSignal.timeout(12000),
     cache: "no-store",
   });

@@ -3,11 +3,15 @@ import "./buffer-polyfill";
 import { FastAuthClient, FastAuthSignature } from "@fast-auth-near/browser-sdk";
 import { Auth0Client } from "@auth0/auth0-spa-js";
 import { connect, keyStores } from "near-api-js";
-import { createTransaction, encodeTransaction, functionCall } from "near-api-js/lib/transaction";
+import {
+  createTransaction,
+  encodeTransaction,
+  functionCall,
+} from "near-api-js/lib/transaction";
 import { PublicKey } from "near-api-js/lib/utils";
 import { base_decode } from "near-api-js/lib/utils/serialize";
 import jwtDecode from "jwt-decode";
-import { rpcUrl } from "@/lib/network";
+import { rpcUrl } from "@/marks/lib/network";
 
 const CLIENT_ID = "np8paqIpMWmNbzT4xAvOOapZBjsOpptl";
 const DOMAIN = "login.testnet.fast-auth.com";
@@ -44,7 +48,11 @@ class GoogleProvider {
       const params = new URLSearchParams(window.location.search);
       if (params.get("code") && params.get("state")) {
         await this.auth().handleRedirectCallback();
-        window.history.replaceState({}, document.title, window.location.pathname);
+        window.history.replaceState(
+          {},
+          document.title,
+          window.location.pathname,
+        );
         return true;
       }
     } catch {
@@ -64,7 +72,8 @@ class GoogleProvider {
       return new Promise<{ userId: string }>(() => undefined);
     }
     const claims = await this.auth().getIdTokenClaims();
-    if (!claims?.sub) throw new Error("Google sign-in did not return an account");
+    if (!claims?.sub)
+      throw new Error("Google sign-in did not return an account");
     return { userId: claims.sub };
   }
 
@@ -75,7 +84,8 @@ class GoogleProvider {
 
   async getPath() {
     const claims = await this.auth().getIdTokenClaims();
-    if (!claims?.sub) throw new Error("Google sign-in did not return an account");
+    if (!claims?.sub)
+      throw new Error("Google sign-in did not return an account");
     return `${GUARD_ID}#${claims.sub}`;
   }
 
@@ -97,9 +107,11 @@ class GoogleProvider {
     const token = await this.auth().getTokenSilently({
       authorizationParams: { audience: SIGNING_AUDIENCE },
     });
-    if (!token) throw new Error("NEAR Auth did not return an approval for this order");
+    if (!token)
+      throw new Error("NEAR Auth did not return an approval for this order");
     const claims = jwtDecode<Claims>(token);
-    if (!claims.fatxn) throw new Error("NEAR Auth did not return an approval for this order");
+    if (!claims.fatxn)
+      throw new Error("NEAR Auth did not return an approval for this order");
     const signPayload = Array.isArray(claims.fatxn)
       ? claims.fatxn
       : Array.from(claims.fatxn, (char) => char.charCodeAt(0));
@@ -116,7 +128,8 @@ class GoogleProvider {
 
   private async user() {
     const claims = await this.auth().getIdTokenClaims();
-    if (!claims?.sub) throw new Error("Google sign-in did not return an account");
+    if (!claims?.sub)
+      throw new Error("Google sign-in did not return an account");
     return { userId: claims.sub };
   }
 }
@@ -149,12 +162,15 @@ async function client() {
 
 function asPublicKey(value: unknown) {
   const text = typeof value === "string" ? value : String(value ?? "");
-  if (!text.startsWith("ed25519:")) throw new Error("Could not read the Google account key");
+  if (!text.startsWith("ed25519:"))
+    throw new Error("Could not read the Google account key");
   return PublicKey.fromString(text);
 }
 
 function implicitAccount(key: PublicKey) {
-  return Array.from(key.data, (byte) => byte.toString(16).padStart(2, "0")).join("");
+  return Array.from(key.data, (byte) =>
+    byte.toString(16).padStart(2, "0"),
+  ).join("");
 }
 
 async function accountFromSession() {
@@ -190,7 +206,9 @@ export function ensureGoogleFunded(accountId: string) {
     if (response.ok) return;
     funding = null;
     fundedFor = "";
-    const body = (await response.json().catch(() => ({}))) as { error?: string };
+    const body = (await response.json().catch(() => ({}))) as {
+      error?: string;
+    };
     throw new Error(body.error || "Could not fund the Google account");
   });
   return funding;
@@ -222,14 +240,16 @@ export async function googleSend(
   gas: bigint = MARKS_GAS,
   deposit: bigint = BigInt(0),
 ) {
-  return googleSendActions(receiverId, [functionCall(methodName, args, gas, deposit)]);
+  return googleSendActions(receiverId, [
+    functionCall(methodName, args, gas, deposit),
+  ]);
 }
 
 export async function googleSendActions(
   receiverId: string,
   actions: ReturnType<typeof functionCall>[],
 ) {
-  if (!receiverId) throw new Error("NEXT_PUBLIC_CONTRACT_ID is not set");
+  if (!receiverId) throw new Error("VITE_CONTRACT_ID is not set");
   if (actions.length === 0) throw new Error("The transaction has no actions");
   const signer = await (await client()).getSigner();
   const publicKey = asPublicKey(await signer.getPublicKey());
@@ -239,7 +259,9 @@ export async function googleSendActions(
     nonce: number | string;
   };
   const connection = await near();
-  const block = await connection.connection.provider.block({ finality: "final" });
+  const block = await connection.connection.provider.block({
+    finality: "final",
+  });
   const transaction = createTransaction(
     accountId,
     publicKey,
@@ -262,7 +284,9 @@ export async function googleSendActions(
     body: JSON.stringify({
       guardId: signatureRequest.guardId,
       verifyPayload: signatureRequest.verifyPayload,
-      signPayload: Array.from(signatureRequest.signPayload, (byte) => Number(byte)),
+      signPayload: Array.from(signatureRequest.signPayload, (byte) =>
+        Number(byte),
+      ),
       algorithm: "eddsa",
     }),
   });

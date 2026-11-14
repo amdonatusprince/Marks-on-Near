@@ -1,18 +1,21 @@
-import { quoteBody } from "@/lib/quote-request";
-import { NextResponse } from "next/server";
+import { defineEventHandler } from "h3";
+import { quoteBody } from "../../../app/marks/lib/quote-request";
 
-export async function POST(request: Request) {
+async function post(request: Request) {
   const incoming = (await request.json().catch(() => ({}))) as {
     dry?: boolean;
     recipient?: string;
   };
   const dry = incoming.dry !== false;
-  const recipient = incoming.recipient || process.env.NEXT_PUBLIC_INTENTS_RECIPIENT || "marks.near";
+  const recipient =
+    incoming.recipient || process.env.VITE_INTENTS_RECIPIENT || "marks.near";
   const response = await fetch("https://1click.chaindefuser.com/v0/quote", {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(quoteBody(recipient, dry)),
   });
   const body = await response.json();
-  return NextResponse.json(body, { status: response.status });
+  return Response.json(body, { status: response.status });
 }
+
+export default defineEventHandler((event) => post(event.req));
