@@ -1,16 +1,17 @@
-"use client";
-
 // Screens, copy rhythm and styles follow Moi's claim page (MIT): https://github.com/ramakrishnanhulk20/Moi.
-import { useNotify } from "@/components/toast";
-import "@/components/marks/certificate.css";
-import "@/components/marks/claim.css";
-import "@/components/marks/hero.css";
-import { ClaimStage, type SceneState } from "@/components/marks/ClaimStage";
-import type { CertificateProps } from "@/components/marks/Certificate";
-import { figures, money } from "@/lib/format";
-import { claimSignature, openNote, publicKeyOf } from "@/lib/gift-key";
-import { useNear } from "@/lib/near";
-import { contractFor } from "@/lib/network";
+import { useNotify } from "@/marks/components/toast";
+import "@/marks/components/marks/certificate.css";
+import "@/marks/components/marks/claim.css";
+import "@/marks/components/marks/hero.css";
+import {
+  ClaimStage,
+  type SceneState,
+} from "@/marks/components/marks/ClaimStage";
+import type { CertificateProps } from "@/marks/components/marks/Certificate";
+import { figures, money } from "@/marks/lib/format";
+import { claimSignature, openNote, publicKeyOf } from "@/marks/lib/gift-key";
+import { useNear } from "@/marks/lib/near";
+import { contractFor } from "@/marks/lib/network";
 import {
   explorerTx,
   reason,
@@ -20,17 +21,10 @@ import {
   viewMarks,
   type Gift,
   type Share,
-} from "@/lib/v2";
-import { Fraunces } from "next/font/google";
-import Link from "next/link";
+} from "@/marks/lib/v2";
+import { displayItalic } from "@/marks/lib/fonts";
+import Link from "@/marks/components/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
-
-const displayItalic = Fraunces({
-  subsets: ["latin"],
-  style: ["italic"],
-  axes: ["opsz", "SOFT", "WONK"],
-  display: "swap",
-});
 
 const MONTHS = [
   "JAN",
@@ -53,7 +47,13 @@ type View =
   | { screen: "claimed" | "refunded" | "voided" | "expired"; gift: Gift }
   | { screen: "ready"; gift: Gift }
   | { screen: "opening"; gift: Gift }
-  | { screen: "opened"; gift: Gift; note: string; hash: string; recipient: string }
+  | {
+      screen: "opened";
+      gift: Gift;
+      note: string;
+      hash: string;
+      recipient: string;
+    }
   | { screen: "error"; gift: Gift | null; message: string; started: boolean };
 
 function sceneOf(view: View): SceneState | null {
@@ -88,7 +88,8 @@ function nameOf(gift: Gift, shares: Share[]) {
   if (asset.kind === "usdc") return "US dollars";
   if (asset.kind === "position") return asset.symbol;
   return (
-    shares.find((share) => share.asset_id === asset.asset_id)?.name ?? shareTicker(asset.asset_id)
+    shares.find((share) => share.asset_id === asset.asset_id)?.name ??
+    shareTicker(asset.asset_id)
   );
 }
 
@@ -124,16 +125,25 @@ export function ClaimFlow({ giftId }: { giftId: number | null }) {
         setShares(list);
         if (!gift || publicKeyOf(fragment) !== gift.claim_key)
           return setView({ screen: "invalid" });
-        if (gift.status === "claimed") return setView({ screen: "claimed", gift });
-        if (gift.status === "refunded") return setView({ screen: "refunded", gift });
-        if (gift.status === "voided") return setView({ screen: "voided", gift });
-        if (gift.expiry_ns <= Date.now() * 1e6) return setView({ screen: "expired", gift });
+        if (gift.status === "claimed")
+          return setView({ screen: "claimed", gift });
+        if (gift.status === "refunded")
+          return setView({ screen: "refunded", gift });
+        if (gift.status === "voided")
+          return setView({ screen: "voided", gift });
+        if (gift.expiry_ns <= Date.now() * 1e6)
+          return setView({ screen: "expired", gift });
         setView({ screen: "ready", gift });
       })
       .catch(
         (caught) =>
           !cancelled &&
-          setView({ screen: "error", gift: null, message: reason(caught), started: false }),
+          setView({
+            screen: "error",
+            gift: null,
+            message: reason(caught),
+            started: false,
+          }),
       );
     return () => {
       cancelled = true;
@@ -152,7 +162,11 @@ export function ClaimFlow({ giftId }: { giftId: number | null }) {
       };
     }
     if (asset.kind === "position") {
-      return { figure: "1", holding: `OPEN ${asset.symbol} POSITION`, worth: null };
+      return {
+        figure: "1",
+        holding: `OPEN ${asset.symbol} POSITION`,
+        worth: null,
+      };
     }
     const share = shares.find((item) => item.asset_id === asset.asset_id);
     return {
@@ -173,9 +187,16 @@ export function ClaimFlow({ giftId }: { giftId: number | null }) {
       const response = await fetch("/api/gift/claim", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ gift_id: gift.id, recipient: account, signature }),
+        body: JSON.stringify({
+          gift_id: gift.id,
+          recipient: account,
+          signature,
+        }),
       });
-      const body = (await response.json().catch(() => ({}))) as { hash?: string; error?: string };
+      const body = (await response.json().catch(() => ({}))) as {
+        hash?: string;
+        error?: string;
+      };
       if (response.ok && body.hash) {
         hash = body.hash;
       } else {
@@ -189,14 +210,21 @@ export function ClaimFlow({ giftId }: { giftId: number | null }) {
       const note = await openNote(secret, gift.note).catch(() => "");
       setView({ screen: "opened", gift, note, hash, recipient: account });
     } catch (caught) {
-      setView({ screen: "error", gift, message: reason(caught), started: true });
+      setView({
+        screen: "error",
+        gift,
+        message: reason(caught),
+        started: true,
+      });
     }
   }, [gift, account, contract, secret, send]);
 
   const scene = sceneOf(view);
   return (
     <div className="claim-page" data-scene={scene === null ? "none" : "shown"}>
-      {scene === null ? null : <ClaimStage state={scene} certificate={certificate} />}
+      {scene === null ? null : (
+        <ClaimStage state={scene} certificate={certificate} />
+      )}
       <section
         className="claim-panel"
         key={view.screen}
@@ -251,7 +279,8 @@ function Panel({
         <>
           <h1 className="claim-h">{"This link doesn't open a gift."}</h1>
           <p className="claim-body">
-            It may have been cut short or changed. Ask the sender to send it again, whole.
+            It may have been cut short or changed. Ask the sender to send it
+            again, whole.
           </p>
           <p className="claim-links">
             <Link className="claim-link" href="/">
@@ -265,8 +294,8 @@ function Panel({
         <>
           <h1 className="claim-h">This gift has been opened.</h1>
           <p className="claim-body">
-            It belongs to {view.gift.recipient ?? "whoever opened it"}. If that was you, it is
-            already in your Marks account.
+            It belongs to {view.gift.recipient ?? "whoever opened it"}. If that
+            was you, it is already in your Marks account.
           </p>
           <p className="claim-links">
             <Link className="claim-link" href="/portfolio">
@@ -280,7 +309,8 @@ function Panel({
         <>
           <h1 className="claim-h">This gift went back to the sender.</h1>
           <p className="claim-body">
-            Gifts that are not opened before they expire return to whoever sent them.
+            Gifts that are not opened before they expire return to whoever sent
+            them.
           </p>
         </>
       );
@@ -310,8 +340,13 @@ function Panel({
           <h1 className="claim-h claim-h-big">
             Someone sent you
             <br />
-            <em className="claim-italic" style={{ fontFamily: displayItalic.style.fontFamily }}>
-              {view.gift.asset.kind === "position" ? `their ${name} trade.` : `a piece of ${name}.`}
+            <em
+              className="claim-italic"
+              style={{ fontFamily: displayItalic.style.fontFamily }}
+            >
+              {view.gift.asset.kind === "position"
+                ? `their ${name} trade.`
+                : `a piece of ${name}.`}
             </em>
           </h1>
           <p className="claim-count">{countOf(view.gift)}</p>
@@ -321,11 +356,16 @@ function Panel({
             </button>
           ) : !account ? (
             <>
-              <button type="button" className="claim-primary" onClick={onSignIn}>
+              <button
+                type="button"
+                className="claim-primary"
+                onClick={onSignIn}
+              >
                 Sign in to open it
               </button>
               <p className="claim-fine">
-                Use Google. Marks makes a NEAR account for you: no seed phrase, no fees.
+                Use Google. Marks makes a NEAR account for you: no seed phrase,
+                no fees.
               </p>
             </>
           ) : (
@@ -334,17 +374,26 @@ function Panel({
                 <span>
                   Signed in as <span className="claim-nowrap">{account}</span>
                 </span>
-                <button type="button" className="claim-link claim-link-small" onClick={onSignOut}>
+                <button
+                  type="button"
+                  className="claim-link claim-link-small"
+                  onClick={onSignOut}
+                >
                   Not you? Sign out
                 </button>
               </p>
               {view.gift.asset.kind === "position" ? (
                 <p className="claim-fine">
-                  The position moves into your account on {view.gift.asset.symbol}. Your account
-                  needs no open position there.
+                  The position moves into your account on{" "}
+                  {view.gift.asset.symbol}. Your account needs no open position
+                  there.
                 </p>
               ) : null}
-              <button type="button" className="claim-primary claim-open" onClick={onOpen}>
+              <button
+                type="button"
+                className="claim-primary claim-open"
+                onClick={onOpen}
+              >
                 Open your gift
               </button>
             </>
@@ -363,7 +412,10 @@ function Panel({
           </p>
           {view.note ? (
             <blockquote className="claim-note">
-              <p className="claim-note-text" style={{ fontFamily: displayItalic.style.fontFamily }}>
+              <p
+                className="claim-note-text"
+                style={{ fontFamily: displayItalic.style.fontFamily }}
+              >
                 {view.note}
               </p>
               <p className="claim-note-from">A NOTE FROM THE SENDER</p>
@@ -419,8 +471,8 @@ function Opening() {
     <>
       <h1 className="claim-h claim-h-opening">Opening your gift</h1>
       <p className="claim-body">
-        Marks is moving it into your account and paying the network fee. NEAR usually confirms in
-        two seconds.
+        Marks is moving it into your account and paying the network fee. NEAR
+        usually confirms in two seconds.
       </p>
       <p className="claim-timer">{`${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`}</p>
     </>
