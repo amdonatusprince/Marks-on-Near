@@ -1,11 +1,9 @@
-import { agentId, redact, runScript } from "@/lib/auth-script";
-import { rpcUrl } from "@/lib/network";
+import { defineEventHandler } from "h3";
+import { agentId, redact, runScript } from "../../../marks/auth-script";
+import { MARKS_RPC } from "../../../../shared/marks";
 import { mkdtemp, rm, writeFile } from "fs/promises";
 import os from "os";
 import path from "path";
-
-export const runtime = "nodejs";
-export const dynamic = "force-dynamic";
 
 const GUARD_ID = "jwt#https://login.testnet.fast-auth.com/";
 const JWT = /^eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/;
@@ -17,12 +15,15 @@ type Body = {
   algorithm?: string;
 };
 
-export async function POST(request: Request) {
+async function post(request: Request) {
   let body: Body;
   try {
     body = (await request.json()) as Body;
   } catch {
-    return Response.json({ error: "The signature request was not valid JSON" }, { status: 400 });
+    return Response.json(
+      { error: "The signature request was not valid JSON" },
+      { status: 400 },
+    );
   }
   const payload = body.signPayload ?? [];
   const valid =
@@ -35,7 +36,10 @@ export async function POST(request: Request) {
     payload.length < 100_000 &&
     payload.every((byte) => Number.isInteger(byte) && byte >= 0 && byte <= 255);
   if (!valid) {
-    return Response.json({ error: "The signature request was rejected" }, { status: 400 });
+    return Response.json(
+      { error: "The signature request was rejected" },
+      { status: 400 },
+    );
   }
 
   const dir = await mkdtemp(path.join(os.tmpdir(), "marks-auth-"));
@@ -61,7 +65,9 @@ export async function POST(request: Request) {
     return Response.json({ hash, successValue });
   } catch (caught) {
     const message =
-      caught instanceof Error ? redact(caught.message) : "Could not sign with NEAR Auth";
+      caught instanceof Error
+        ? redact(caught.message)
+        : "Could not sign with NEAR Auth";
     return Response.json({ error: message }, { status: 502 });
   } finally {
     await rm(dir, { recursive: true, force: true });
@@ -69,14 +75,18 @@ export async function POST(request: Request) {
 }
 
 async function signatureOf(hash: string, sender: string) {
-  const response = await fetch(rpcUrl("testnet"), {
+  const response = await fetch(MARKS_RPC, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
       jsonrpc: "2.0",
       id: "marks",
       method: "EXPERIMENTAL_tx_status",
-      params: { tx_hash: hash, sender_account_id: sender, wait_until: "EXECUTED" },
+      params: {
+        tx_hash: hash,
+        sender_account_id: sender,
+        wait_until: "EXECUTED",
+      },
     }),
   });
   const body = (await response.json()) as {
@@ -86,15 +96,26 @@ async function signatureOf(hash: string, sender: string) {
       receipts_outcome?: { outcome: { status: { SuccessValue?: string } } }[];
     };
   };
-  if (body.error) throw new Error(body.error.message || "Could not read the signature transaction");
+  if (body.error)
+    throw new Error(
+      body.error.message || "Could not read the signature transaction",
+    );
   const values = [
     body.result?.status?.SuccessValue,
-    ...(body.result?.receipts_outcome ?? []).map((item) => item.outcome.status?.SuccessValue),
+    ...(body.result?.receipts_outcome ?? []).map(
+      (item) => item.outcome.status?.SuccessValue,
+    ),
   ].filter((value): value is string => Boolean(value));
   for (const value of values.reverse()) {
     const text = Buffer.from(value, "base64").toString();
-    if (text.includes("signature") || text.includes("big_r") || text.includes("scalar"))
+    if (
+      text.includes("signature") ||
+      text.includes("big_r") ||
+      text.includes("scalar")
+    )
       return value;
   }
   throw new Error("The signature transaction did not return a signature");
 }
+
+export default defineEventHandler((event) => post(event.req));

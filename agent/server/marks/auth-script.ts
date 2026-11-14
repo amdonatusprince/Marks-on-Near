@@ -4,19 +4,23 @@ import path from "path";
 
 export function repoRoot() {
   const cwd = process.cwd();
-  return path.basename(cwd) === "web" ? path.resolve(cwd, "..") : cwd;
+  return path.basename(cwd) === "agent" ? path.resolve(cwd, "..") : cwd;
 }
 
 export async function agentId() {
-  const text = await readFile(path.join(repoRoot(), "scripts/testnet.env"), "utf8");
+  const fromEnv = process.env.AGENT_ID?.trim();
+  if (fromEnv) return fromEnv;
+  const text = await readFile(path.join(repoRoot(), ".env"), "utf8");
   const match = text.match(/^AGENT_ID=(.+)$/m);
   const id = match?.[1]?.trim();
-  if (!id) throw new Error("AGENT_ID is missing from scripts/testnet.env");
+  if (!id) throw new Error("AGENT_ID is missing from .env");
   return id;
 }
 
 export function redact(text: string) {
-  return text.replace(/eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g, "[jwt]").slice(-2000);
+  return text
+    .replace(/eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g, "[jwt]")
+    .slice(-2000);
 }
 
 export function runScript(name: string, args: string[], timeoutMs: number) {
@@ -41,7 +45,8 @@ export function runScript(name: string, args: string[], timeoutMs: number) {
     });
     child.on("close", (code) => {
       clearTimeout(timer);
-      if (code !== 0) reject(new Error(redact(stderr || stdout || `Script exited ${code}`)));
+      if (code !== 0)
+        reject(new Error(redact(stderr || stdout || `Script exited ${code}`)));
       else resolve(stdout);
     });
   });
