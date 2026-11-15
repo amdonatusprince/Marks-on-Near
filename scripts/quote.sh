@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # Post a one-lot bid one tick under the mark and a one-lot ask one tick over it.
-# Both are post-only. The agent account is AGENT_ID in scripts/testnet.env.
+# Both are post-only. The agent account is AGENT_ID in .env.
 #
 #   ./scripts/quote.sh
 
 set -euo pipefail
 source "$(dirname "$0")/lib.sh"
 load_testnet
-: "${AGENT_ID:?AGENT_ID is required in scripts/testnet.env}"
+: "${AGENT_ID:?AGENT_ID is required in .env}"
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 LOTS=1

@@ -63,13 +63,14 @@ fi
 # "Do you want to proceed?" and, without a terminal, prints the warning and exits.
 # The first choice is yes. Answer it, so the 0.05 NEAR creates the account.
 BIN="$(near_bin)"
-python3 - "$BIN" "${AGENT_ID}" "${ACCOUNT}" <<'PY'
+SIGN_WITH="$(near_sign_with "${AGENT_ID}")"
+python3 - "$BIN" "${AGENT_ID}" "${ACCOUNT}" "${SIGN_WITH}" <<'PY'
 import os
 import pty
 import select
 import sys
 
-binary, agent, account = sys.argv[1:]
+binary, agent, account, sign_with = sys.argv[1:]
 command = [
     "npx",
     "--yes",
@@ -83,7 +84,7 @@ command += [
     "0.05 NEAR",
     "network-config",
     "testnet",
-    "sign-with-keychain",
+    sign_with,
     "send",
 ]
 pid, fd = pty.fork()
