@@ -1,0 +1,14 @@
+.git
+**/.env
+**/.env.*
+!**/.env.example
+**/node_modules
+**/data
+**/.output
+**/.react-router
+**/.generated
+**/target
+**/*.wasm
+**/.DS_Store
+agent/logs
+*.log
