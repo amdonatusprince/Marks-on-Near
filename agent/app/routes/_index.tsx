@@ -1,15 +1,38 @@
-import Link from "next/link";
-import { MarketBoard } from "@/components/market-board";
-import type { CertificateProps } from "@/components/marks/Certificate";
-import { Hero, type TickerEntry } from "@/components/marks/Hero";
-import "@/components/marks/sections.css";
-import { grouped, price } from "@/lib/format";
-import { contractFor } from "@/lib/network";
-import { selectedNetwork } from "@/lib/network-server";
-import { view, type Market } from "@/lib/rpc";
-import type { Share } from "@/lib/v2";
+import { useLoaderData } from "react-router";
 
-export const dynamic = "force-dynamic";
+import Link from "@/marks/components/link";
+import { fundingRates, MarketBoard } from "@/marks/components/market-board";
+import type { CertificateProps } from "@/marks/components/marks/Certificate";
+import { Hero, type TickerEntry } from "@/marks/components/marks/Hero";
+import "@/marks/components/marks/sections.css";
+import { grouped, price } from "@/marks/lib/format";
+import { contractFor, SERVED_NETWORK } from "@/marks/lib/network";
+import { view, type Market } from "@/marks/lib/rpc";
+import { liveHeaders } from "@/marks/lib/page-load";
+import { marksMeta } from "@/marks/lib/site-meta";
+import type { Share } from "@/marks/lib/v2";
+
+export function meta() {
+  return marksMeta("Marks - Trade, borrow and gift on NEAR");
+}
+
+export const headers = liveHeaders;
+
+export async function loader() {
+  const network = SERVED_NETWORK;
+  if (!contractFor(network)) {
+    return {
+      markets: [] as Market[],
+      shares: [] as Share[],
+      rates: [] as (number | null)[],
+    };
+  }
+  const [markets, shares] = await Promise.all([
+    view<Market[]>(network, "get_markets", {}).catch(() => [] as Market[]),
+    view<Share[]>(network, "get_shares", {}).catch(() => [] as Share[]),
+  ]);
+  return { markets, shares, rates: await fundingRates(network, markets) };
+}
 
 const GIFT_ATOMS = BigInt(25_000_000);
 
@@ -50,21 +73,15 @@ const STEPS = [
     body: "USDC, a share or a whole position. Your friend claims with Google.",
     math: (
       <>
-        fee <b>1%</b>, refundable after <b>1 to 90 days</b>
+        fee <b>1%</b>, revoke it any time in the <b>1 to 90 days</b> it stays
+        open
       </>
     ),
   },
 ] as const;
 
-export default async function Home() {
-  const network = await selectedNetwork();
-  const configured = Boolean(contractFor(network));
-  const [markets, shares] = configured
-    ? await Promise.all([
-        view<Market[]>(network, "get_markets", {}).catch(() => [] as Market[]),
-        view<Share[]>(network, "get_shares", {}).catch(() => [] as Share[]),
-      ])
-    : [[] as Market[], [] as Share[]];
+export default function Home() {
+  const { markets, shares, rates } = useLoaderData<typeof loader>();
 
   const ticker: TickerEntry[] = markets
     .filter((market) => market.mark_ticks > 0)
@@ -72,12 +89,19 @@ export default async function Home() {
       name: market.symbol.replace("-PERP", ""),
       price: price(market.mark_ticks, market.tick_size),
     }));
-  const nvda = shares.find((share) => share.asset_id === "nvda" && BigInt(share.price) > BigInt(0));
-  const btc = markets.find((market) => market.symbol === "BTC-PERP" && market.mark_ticks > 0);
+  const nvda = shares.find(
+    (share) => share.asset_id === "nvda" && BigInt(share.price) > BigInt(0),
+  );
+  const btc = markets.find(
+    (market) => market.symbol === "BTC-PERP" && market.mark_ticks > 0,
+  );
   const gift: CertificateProps = nvda
     ? {
         figure: grouped(
-          (Number((GIFT_ATOMS * BigInt(1_000_000)) / BigInt(nvda.price)) / 1_000_000).toFixed(4),
+          (
+            Number((GIFT_ATOMS * BigInt(1_000_000)) / BigInt(nvda.price)) /
+            1_000_000
+          ).toFixed(4),
         ),
         holding: "SHARES OF NVIDIA CORPORATION",
         worth: "WORTH $25.00 TODAY",
@@ -94,7 +118,9 @@ export default async function Home() {
       verb: "IS LONG",
       figure: "10×",
       holding: "BTC-PERP, SETTLED IN USDC",
-      worth: btc ? `MARK ${price(btc.mark_ticks, btc.tick_size)} A CONTRACT` : null,
+      worth: btc
+        ? `MARK ${price(btc.mark_ticks, btc.tick_size)} A CONTRACT`
+        : null,
       note: ["OPENED", "IN ONE CLICK"],
     },
     {
@@ -116,7 +142,9 @@ export default async function Home() {
         <h2 className="sec-title" id="how-title">
           One balance, <span className="sec-title-italic">four moves.</span>
         </h2>
-        <p className="sec-lede">One USDC balance on NEAR. Every fee is 1 percent.</p>
+        <p className="sec-lede">
+          One USDC balance on NEAR. Every fee is 1 percent.
+        </p>
         <ol className="how-strip">
           {STEPS.map((step, index) => (
             <li className="how-frame" key={step.label}>
@@ -144,9 +172,11 @@ export default async function Home() {
         </div>
         <div className="market-board-reveal mt-10">
           {markets.length > 0 ? (
-            <MarketBoard network={network} markets={markets} />
+            <MarketBoard markets={markets} rates={rates} />
           ) : (
-            <p className="text-ink-muted">The board could not be read right now.</p>
+            <p className="text-ink-muted">
+              The board could not be read right now.
+            </p>
           )}
         </div>
       </section>
