@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Create the v2 accounts: mock USDC, the oracle, Marks v2, and six traders.
-# Appends V2_* lines to scripts/testnet.env. Nothing above them changes.
+# Writes the v2 accounts into .env. The contract, oracle and token use the
+# same VITE_* names as the app. Nothing else in the file changes.
 #   ./scripts/v2-accounts.sh
 
 set -euo pipefail
@@ -8,7 +9,7 @@ source "$(dirname "$0")/v2-common.sh"
 load_testnet
 
 if [[ -n "${V2_CONTRACT_ID:-}" ]]; then
-  echo "v2 accounts are already in scripts/testnet.env"
+  echo "v2 accounts are already in .env"
   echo "Marks v2: https://testnet.nearblocks.io/address/${V2_CONTRACT_ID}"
   exit 0
 fi
@@ -34,14 +35,9 @@ for FROM in "${TRADERS[4]}" "${TRADERS[5]}"; do
 done
 
 JOINED="$(IFS=,; echo "${TRADERS[*]}")"
-cat >> "${ENV_FILE}" <<EOF
+env_set VITE_TOKEN_ID "${TOKEN}"
+env_set VITE_ORACLE_ID "${ORACLE}"
+env_set VITE_CONTRACT_ID "${MARKS}"
+env_set V2_TRADERS "${JOINED}"
 
-# Marks v2. Appended by scripts/v2-accounts.sh. Everything above stays live.
-V2_TOKEN_ID=${TOKEN}
-V2_ORACLE_ID=${ORACLE}
-V2_CONTRACT_ID=${MARKS}
-V2_FEE_ID=${MARKS}
-V2_TRADERS=${JOINED}
-EOF
-
-echo "Appended the v2 accounts to scripts/testnet.env"
+echo "Wrote the v2 accounts to .env"
